@@ -7,6 +7,13 @@ import { getDb } from '@/db/client';
 
 import { sendEmail } from './mailer';
 
+const secret = process.env.BETTER_AUTH_SECRET;
+if (!secret || secret.length < 16) {
+  throw new Error(
+    'BETTER_AUTH_SECRET must be set to at least 16 characters (openssl rand -base64 32)',
+  );
+}
+
 export const auth = betterAuth({
   database: drizzleAdapter(getDb(), { provider: 'pg', schema: authSchema }),
   // Listing invitations by email would let someone who registers an invitee's
