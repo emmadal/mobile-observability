@@ -1,0 +1,6 @@
+packages:
+  - apps/*
+  - packages/*
+
+# React Native autolinking and Gradle/CocoaPods resolve native code from a flat node_modules.
+nodeLinker: hoisted
