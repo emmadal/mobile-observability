@@ -171,3 +171,39 @@ describe('parseEnvelope', () => {
     expect(result.ok).toBe(false);
   });
 });
+
+describe('parseEnvelope hardening', () => {
+  it('drops items whose type is an Object.prototype key instead of throwing', () => {
+    for (const type of ['constructor', 'toString', '__proto__', 'hasOwnProperty']) {
+      const result = parseEnvelope({ ...baseEnvelope(), items: [{ type }] });
+      expect(result.ok).toBe(true);
+      if (result.ok) expect(result.droppedItems).toBe(1);
+    }
+  });
+
+  it('rejects deeply nested attributes without overflowing the stack', () => {
+    let nested: Record<string, unknown> = { leaf: true };
+    for (let i = 0; i < 100_000; i += 1) nested = { n: nested };
+    const result = parseEnvelope({
+      ...baseEnvelope(),
+      items: [{ type: 'event', eventId: 'e1', timestamp: 1, name: 'deep', attributes: nested }],
+    });
+    expect(result.ok).toBe(false);
+  });
+
+  it('accepts attributes nested within the limit', () => {
+    const result = parseEnvelope({
+      ...baseEnvelope(),
+      items: [
+        {
+          type: 'event',
+          eventId: 'e1',
+          timestamp: 1,
+          name: 'ok',
+          attributes: { a: { b: { c: [1, 2, { d: 'x' }] } } },
+        },
+      ],
+    });
+    expect(result.ok).toBe(true);
+  });
+});

@@ -13,7 +13,31 @@ import {
 const truncated = (max: number) => z.string().transform((value) => value.slice(0, max));
 const id = z.string().min(1).max(64);
 const epochMs = z.number().int().nonnegative();
-const jsonRecord = z.record(z.string().max(128), z.json());
+const MAX_JSON_DEPTH = 8;
+
+/** True when a JSON-like value nests no deeper than `maxDepth` (checked iteratively, no recursion). */
+export function isWithinJsonDepth(value: unknown, maxDepth = MAX_JSON_DEPTH): boolean {
+  const stack: { node: unknown; depth: number }[] = [{ node: value, depth: 0 }];
+  while (stack.length > 0) {
+    const { node, depth } = stack.pop() as { node: unknown; depth: number };
+    if (node === null || typeof node !== 'object') continue;
+    if (depth >= maxDepth) return false;
+    for (const child of Object.values(node)) stack.push({ node: child, depth: depth + 1 });
+  }
+  return true;
+}
+
+/** Free-form attributes: depth-limited before zod walks them, so hostile nesting cannot overflow the stack. */
+const jsonRecord = z
+  .custom<Record<string, unknown>>(
+    (value) =>
+      typeof value === 'object' &&
+      value !== null &&
+      !Array.isArray(value) &&
+      isWithinJsonDepth(value),
+    { message: `Expected an object nested at most ${MAX_JSON_DEPTH} levels` },
+  )
+  .pipe(z.record(z.string().max(128), z.json()));
 
 export const frameSchema = z.object({
   function: truncated(256).optional(),
@@ -203,7 +227,7 @@ function isKnownItemType(value: unknown): value is { type: ItemType } {
     value !== null &&
     'type' in value &&
     typeof value.type === 'string' &&
-    value.type in itemSchemas
+    Object.hasOwn(itemSchemas, value.type)
   );
 }
 
@@ -213,6 +237,15 @@ function isKnownItemType(value: unknown): value is { type: ItemType } {
  * the whole envelope with field paths (AC-13, AC-16).
  */
 export function parseEnvelope(input: unknown): ParseEnvelopeResult {
+  try {
+    return parseEnvelopeUnsafe(input);
+  } catch {
+    // Defense in depth: any unexpected validator failure is a client error, never a crash.
+    return { ok: false, issues: [{ path: '', message: 'Malformed envelope' }] };
+  }
+}
+
+function parseEnvelopeUnsafe(input: unknown): ParseEnvelopeResult {
   const header = envelopeHeaderSchema
     .extend({ items: z.array(z.unknown()).max(LIMITS.maxItemsPerEnvelope) })
     .safeParse(input);
