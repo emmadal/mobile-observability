@@ -1,0 +1,73 @@
+{
+  "name": "@mobile-observability/react-native",
+  "version": "0.1.0",
+  "description": "Crash reporting, error grouping, startup/screen performance and network monitoring for Expo and React Native apps.",
+  "license": "MIT",
+  "author": "mobile-observability",
+  "homepage": "https://github.com/mobile-observability/mobile-observability",
+  "main": "build/index.js",
+  "types": "build/index.d.ts",
+  "react-native": "src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./build/index.d.ts",
+      "react-native": "./src/index.ts",
+      "default": "./build/index.js"
+    },
+    "./integrations/react-navigation": {
+      "types": "./build/integrations/react-navigation.d.ts",
+      "react-native": "./src/integrations/react-navigation.tsx",
+      "default": "./build/integrations/react-navigation.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "mobs": "./cli/mobs.mjs"
+  },
+  "files": [
+    "build",
+    "src",
+    "ios",
+    "android/build.gradle",
+    "android/src",
+    "cli",
+    "expo-module.config.json",
+    "!**/__tests__",
+    "!**/*.test.*"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@mobile-observability/protocol": "workspace:*",
+    "fflate": "^0.8.3"
+  },
+  "peerDependencies": {
+    "expo": ">=56",
+    "react": ">=19",
+    "react-native": ">=0.83",
+    "expo-router": ">=56",
+    "@react-navigation/native": ">=7"
+  },
+  "peerDependenciesMeta": {
+    "expo-router": {
+      "optional": true
+    },
+    "@react-navigation/native": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@testing-library/react": "^16.3.0",
+    "@types/react": "~19.3.0",
+    "expo": "~58.0.26",
+    "jsdom": "^27.0.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "react-native": "0.88.1",
+    "typescript": "~6.0.3",
+    "vitest": "^5.1.1"
+  }
+}
