@@ -1,6 +1,9 @@
 node_modules/
 dist/
 build/
+# The mobs CLI ships its build output so GitHub installs need no build step.
+!packages/cli/build/
+!packages/cli/build/**
 .next/
 .expo/
 .turbo/
