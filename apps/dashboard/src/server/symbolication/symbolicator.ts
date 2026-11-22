@@ -13,14 +13,35 @@ export interface LoadedMap {
   map: TraceMap;
   /** Common directory of the app's own sources, stripped for display. */
   projectRoot: string;
+  /** Source files split into lines once, on first use. */
+  lines: Map<string, string[] | null>;
 }
 
 const CONTEXT_LINES = 5;
+const MAX_CONTEXT_LINE_LENGTH = 256;
+/** Upper bound on frames symbolicated per envelope (500 errors x 100 frames otherwise). */
+export const MAX_SYMBOLICATED_FRAMES_PER_ENVELOPE = 5_000;
 
 export function loadMap(raw: string): LoadedMap {
   const map = new TraceMap(raw);
-  return { map, projectRoot: commonRoot(map.sources.filter((s): s is string => !!s)) };
+  return {
+    map,
+    projectRoot: commonRoot(map.sources.filter((s): s is string => !!s)),
+    lines: new Map(),
+  };
 }
+
+function sourceLines(loaded: LoadedMap, source: string): string[] | null {
+  let lines = loaded.lines.get(source);
+  if (lines === undefined) {
+    const content = sourceContentFor(loaded.map, source);
+    lines = content ? content.split('\n') : null;
+    loaded.lines.set(source, lines);
+  }
+  return lines;
+}
+
+const clip = (line: string) => line.slice(0, MAX_CONTEXT_LINE_LENGTH);
 
 /**
  * The project root is where node_modules lives (every Metro bundle includes
@@ -48,15 +69,14 @@ export function displayPath(source: string, projectRoot: string): string {
 }
 
 function contextFor(loaded: LoadedMap, source: string, line: number): SourceContext | undefined {
-  const content = sourceContentFor(loaded.map, source);
-  if (!content) return undefined;
-  const lines = content.split('\n');
+  const lines = sourceLines(loaded, source);
+  if (!lines) return undefined;
   const index = line - 1;
   if (index < 0 || index >= lines.length) return undefined;
   return {
-    pre: lines.slice(Math.max(0, index - CONTEXT_LINES), index),
-    line: lines[index] ?? '',
-    post: lines.slice(index + 1, index + 1 + CONTEXT_LINES),
+    pre: lines.slice(Math.max(0, index - CONTEXT_LINES), index).map(clip),
+    line: clip(lines[index] ?? ''),
+    post: lines.slice(index + 1, index + 1 + CONTEXT_LINES).map(clip),
   };
 }
 

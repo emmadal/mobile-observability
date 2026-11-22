@@ -23,6 +23,7 @@ import type { ResolvedProject } from '../keys/resolve';
 import { findSourceMap } from '../symbolication/store';
 import {
   bundleKeysFor,
+  MAX_SYMBOLICATED_FRAMES_PER_ENVELOPE,
   type SymbolicatedFrame,
   symbolicateFrames,
 } from '../symbolication/symbolicator';
@@ -167,9 +168,12 @@ async function symbolicateErrors(
     bundleKeysFor(envelope.app),
   );
   if (!loaded) return errors.map(() => null);
-  return errors.map((error) =>
-    error.origin === 'js' ? symbolicateFrames(error.exception.frames, loaded) : null,
-  );
+  let budget = MAX_SYMBOLICATED_FRAMES_PER_ENVELOPE;
+  return errors.map((error) => {
+    if (error.origin !== 'js' || budget < error.exception.frames.length) return null;
+    budget -= error.exception.frames.length;
+    return symbolicateFrames(error.exception.frames, loaded);
+  });
 }
 
 type Context = ReturnType<typeof contextColumns>;

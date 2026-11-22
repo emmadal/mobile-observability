@@ -58,3 +58,24 @@ describe('helpers', () => {
     expect(bundleKeysFor({ version: '1.0', build: '7' })).toEqual(['build:1.0+7']);
   });
 });
+
+describe('context limits', () => {
+  it('clips long context lines and splits each source once', async () => {
+    const { addMapping, GenMapping, setSourceContent, toEncodedMap } = await import(
+      '@jridgewell/gen-mapping'
+    );
+    const map = new GenMapping();
+    setSourceContent(map, '/app/node_modules/x/i.js', '');
+    setSourceContent(map, '/app/src/big.ts', `${'a'.repeat(10_000)}\nsecond`);
+    addMapping(map, {
+      generated: { line: 1, column: 0 },
+      source: '/app/src/big.ts',
+      original: { line: 1, column: 0 },
+    });
+    const loaded = loadMap(JSON.stringify(toEncodedMap(map)));
+    const frame = symbolicateFrame({ file: 'main.jsbundle', line: 1, column: 1 }, loaded);
+    expect(frame.context?.line).toHaveLength(256);
+    symbolicateFrame({ file: 'main.jsbundle', line: 1, column: 1 }, loaded);
+    expect(loaded.lines.size).toBe(1);
+  });
+});
