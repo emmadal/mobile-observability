@@ -16,5 +16,38 @@ services:
       timeout: 3s
       retries: 30
 
+  # Development database only by default. `docker compose --profile app up -d --build`
+  # also builds and runs the dashboard against it (self-hosting quickstart).
+  migrate:
+    profiles: [app]
+    build:
+      context: .
+      target: migrations
+    environment:
+      DATABASE_URL: postgres://mobs:mobs@db:5432/mobs
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  app:
+    profiles: [app]
+    build:
+      context: .
+      target: runner
+    environment:
+      DATABASE_URL: postgres://mobs:mobs@db:5432/mobs
+      # On a VPS set the public https URL so Better Auth issues __Secure- cookies.
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3000}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?generate one with openssl rand -base64 32}
+    ports:
+      - "3000:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
 volumes:
   db-data:

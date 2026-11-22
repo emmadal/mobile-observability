@@ -4,3 +4,9 @@ packages:
 
 # React Native autolinking and Gradle/CocoaPods resolve native code from a flat node_modules.
 nodeLinker: hoisted
+
+# esbuild's postinstall downloads a prebuilt binary; allowing it keeps Docker
+# builds deterministic (pnpm 12 fails on undecided build scripts in
+# non-interactive environments).
+allowBuilds:
+  esbuild: true
