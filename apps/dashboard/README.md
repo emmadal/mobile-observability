@@ -1,36 +1,38 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# @mobile-observability/dashboard
 
-## Getting Started
+Self-hosted dashboard for [mobile-observability](../../README.md): issues, sessions and performance for your React Native/Expo apps.
 
-First, run the development server:
+## Stack
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+- **Next.js 16** App Router with `cacheComponents` + partial prefetching; React 19, Tailwind 4.
+- **Better Auth** (email/password + organizations) on **Drizzle ORM** / **Postgres 18**.
+- **Vitest** (unit + integration tests against a real Postgres), **Playwright** for E2E.
+
+## Architecture rules
+
+- Mutations go through **Server Actions** (`src/app/actions/**`); pages fetch data in React Server Components through server-only modules (`src/server/**`, `src/lib/**`). There is no client-side data fetching layer.
+- `src/proxy.ts` performs the optimistic session gate and sets a per-request nonce CSP; pages re-verify the session via `src/lib/auth/session.ts` (`getCurrentUser`), always inside a `<Suspense>` boundary because session reads are request-time reads.
+- API routes are limited to what external clients need: `/api/v1/*` (SDK ingest, authenticated by project keys) and `/api/auth/*` (Better Auth).
+
+## Environment
+
+Copy `.env.example` to `.env`:
+
+| Variable             | Purpose                                                                 |
+| -------------------- | ----------------------------------------------------------------------- |
+| `DATABASE_URL`       | Postgres connection string (`docker compose up -d db` at the repo root) |
+| `TEST_DATABASE_URL`  | Database used by integration tests (created automatically)              |
+| `BETTER_AUTH_SECRET` | Session signing secret — `openssl rand -base64 32`                      |
+| `BETTER_AUTH_URL`    | Public base URL of the dashboard                                        |
+
+## Scripts
+
+```sh
+pnpm dev          # next dev (Turbopack)
+pnpm build        # production build
+pnpm db:generate  # drizzle-kit generate
+pnpm db:migrate   # apply migrations
+pnpm test         # vitest run (integration tests need Docker Postgres up)
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
-
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Next.js 16 differs from earlier releases: before writing code, consult the bundled docs in `node_modules/next/dist/docs/` (see `AGENTS.md`).
