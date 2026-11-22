@@ -4,7 +4,7 @@
   "description": "Crash reporting, error grouping, startup/screen performance and network monitoring for Expo and React Native apps.",
   "license": "MIT",
   "author": "mobile-observability",
-  "homepage": "https://github.com/mobile-observability/mobile-observability",
+  "homepage": "https://github.com/emmadal/mobile-observability",
   "main": "build/index.js",
   "types": "build/index.d.ts",
   "react-native": "src/index.ts",

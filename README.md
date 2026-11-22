@@ -93,7 +93,7 @@ One image serves every target — a laptop, a personal VPS, or an internal serve
 ### With Docker Compose (local or VPS)
 
 ```sh
-git clone https://github.com/mobile-observability/mobile-observability
+git clone https://github.com/emmadal/mobile-observability
 cd mobile-observability
 export BETTER_AUTH_SECRET="$(openssl rand -base64 32)"
 docker compose --profile app up -d --build
@@ -195,7 +195,7 @@ npm install -g github:emmadal/mobs    # or: npx github:emmadal/mobs --help
 
 - **Privacy** — no request/response bodies, no headers, no query strings and no IP addresses are stored. URLs are reduced to path templates with a per-day cardinality cap.
 - **Dashboard security** — follows the Next.js App Router security guidance: an optimistic session gate plus server-side re-verification in every page (`apps/dashboard/src/lib/auth/session.ts`), a per-request nonce CSP (`apps/dashboard/src/proxy.ts`), `server-only` data-access boundaries, Server Actions for every mutation, and sanitized same-origin redirects.
-- **Report vulnerabilities** privately via a [GitHub security advisory](https://github.com/mobile-observability/mobile-observability/security/advisories/new) rather than a public issue.
+- **Report vulnerabilities** privately via a [GitHub security advisory](https://github.com/emmadal/mobile-observability/security/advisories/new) rather than a public issue.
 
 ## Development
 
