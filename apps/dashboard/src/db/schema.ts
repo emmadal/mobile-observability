@@ -100,7 +100,14 @@ export const issues = pgTable(
   },
   (table) => [
     uniqueIndex('issues_project_fingerprint_idx').on(table.projectId, table.fingerprint),
-    index('issues_project_last_seen_idx').on(table.projectId, table.lastSeen),
+    // List ordering: status filter + descending last_seen with the id tiebreaker
+    // that keyset pagination seeks into.
+    index('issues_project_status_last_seen_idx').on(
+      table.projectId,
+      table.status,
+      table.lastSeen,
+      table.id,
+    ),
   ],
 );
 
@@ -150,7 +157,8 @@ export const errorEvents = pgTable(
   },
   (table) => [
     uniqueIndex('error_events_project_event_idx').on(table.projectId, table.eventId),
-    index('error_events_issue_ts_idx').on(table.issueId, table.timestamp),
+    // Issue detail timeline: descending timestamp with the id tiebreaker.
+    index('error_events_issue_ts_idx').on(table.issueId, table.timestamp, table.id),
     index('error_events_project_ts_idx').on(table.projectId, table.timestamp),
     index('error_events_session_idx').on(table.projectId, table.sessionId),
   ],
@@ -182,7 +190,8 @@ export const sessions = pgTable(
   },
   (table) => [
     uniqueIndex('sessions_project_session_idx').on(table.projectId, table.sessionId),
-    index('sessions_project_started_idx').on(table.projectId, table.startedAt),
+    // Session list ordering with the keyset tiebreaker.
+    index('sessions_project_started_idx').on(table.projectId, table.startedAt, table.id),
     index('sessions_open_idx').on(table.lastSeenAt).where(sql`${table.endedAt} is null`),
   ],
 );
