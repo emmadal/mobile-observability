@@ -21,16 +21,12 @@
     },
     "./package.json": "./package.json"
   },
-  "bin": {
-    "mobs": "./cli/mobs.mjs"
-  },
   "files": [
     "build",
     "src",
     "ios",
     "android/build.gradle",
     "android/src",
-    "cli",
     "expo-module.config.json",
     "!**/__tests__",
     "!**/*.test.*"

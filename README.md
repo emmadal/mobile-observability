@@ -53,13 +53,14 @@ Three moving parts, one Postgres database:
 
 ### Repository layout
 
-| Path                    | What it is                                                                         |
-| ----------------------- | ---------------------------------------------------------------------------------- |
-| `packages/protocol`     | Zod v4 envelope schema shared by the SDK and the server — the single contract      |
-| `packages/react-native` | The SDK: JS core, iOS and Android native modules, and the `mobs` CLI               |
-| `apps/dashboard`        | The self-hosted dashboard: Next.js 16 App Router, Tailwind 4, Drizzle, Better Auth |
-| `apps/example`          | An Expo 58 example app with buttons that deliberately produce every signal         |
-| `docs/specs/`           | The approved platform spec and the task-by-task roadmap                            |
+| Path                    | What it is                                                                                |
+| ----------------------- | ----------------------------------------------------------------------------------------- |
+| `packages/protocol`     | Zod v4 envelope schema shared by the SDK and the server — the single contract             |
+| `packages/react-native` | The SDK: JS core plus iOS and Android native modules                                      |
+| `packages/cli`          | `mobs` — standalone source-map uploader ([emmadal/mobs](https://github.com/emmadal/mobs)) |
+| `apps/dashboard`        | The self-hosted dashboard: Next.js 16 App Router, Tailwind 4, Drizzle, Better Auth        |
+| `apps/example`          | An Expo 58 example app with buttons that deliberately produce every signal                |
+| `docs/specs/`           | The approved platform spec and the task-by-task roadmap                                   |
 
 ### Design rules worth knowing
 
@@ -184,7 +185,11 @@ mobs sourcemaps upload --platform ios --file ios/index.map \
   --app-version 1.4.2 --build 42
 ```
 
-`mobs` ships with `@mobile-observability/react-native` (`pnpm exec mobs --help`).
+`mobs` is a standalone, zero-dependency CLI installable from GitHub — full instructions, Expo and bare-RN workflows and `eas.json` integration live in [`packages/cli/README.md`](packages/cli/README.md):
+
+```sh
+npm install -g github:emmadal/mobs    # or: npx github:emmadal/mobs --help
+```
 
 ## Privacy and security
 
