@@ -33,4 +33,6 @@ export interface PlatformAdapter {
   nextFrame(callback: () => void): void;
   warn(message: string): void;
   XMLHttpRequest?: typeof XMLHttpRequest;
+  /** Object whose `fetch` is wrapped (globalThis in the app). */
+  fetchTarget?: { fetch?: typeof fetch };
 }

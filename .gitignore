@@ -16,3 +16,4 @@ test-results/
 apps/example/ios/
 apps/example/android/
 perf/out/
+docs/

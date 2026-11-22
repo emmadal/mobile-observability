@@ -110,3 +110,68 @@ describe('NetworkTracker (AC-5)', () => {
     expect(tracker.summarize(clock.now + 1, clock.now + 2)).toBeNull();
   });
 });
+
+describe('NetworkTracker fetch wrapping', () => {
+  function setupFetch(impl: typeof fetch) {
+    const clock = { now: 1_000 };
+    const requests: CompletedRequest[] = [];
+    const tracker = new NetworkTracker({
+      now: () => clock.now,
+      shouldIgnore: (url) => url.includes('/api/v1/'),
+      onRequest: (request) => requests.push(request),
+    });
+    const target: { fetch?: typeof fetch } = { fetch: impl };
+    tracker.installFetch(target);
+    return { clock, requests, target, tracker };
+  }
+
+  it('records native fetch requests (expo/fetch) with status and size', async () => {
+    const { requests, target, clock } = setupFetch(async () => {
+      clock.now += 120;
+      return new Response('{}', { status: 404, headers: { 'content-length': '2' } });
+    });
+    await target.fetch?.('https://api.example.com/items/9?q=secret', {
+      method: 'post',
+      body: 'abc',
+    });
+    expect(requests[0]).toMatchObject({
+      method: 'POST',
+      host: 'api.example.com',
+      path: '/items/:id',
+      statusCode: 404,
+      durationMs: 120,
+      bytesReceived: 2,
+      bytesSent: 3,
+    });
+  });
+
+  it('records failures as status 0 and rethrows', async () => {
+    const { requests, target } = setupFetch(async () => {
+      throw new TypeError('Network request failed');
+    });
+    await expect(target.fetch?.('https://down.example.com/')).rejects.toThrow(
+      'Network request failed',
+    );
+    expect(requests[0]).toMatchObject({ statusCode: 0, error: 'network error' });
+  });
+
+  it('skips ignored URLs and the XHR-based polyfill', async () => {
+    const { requests, target } = setupFetch(async () => new Response(null, { status: 202 }));
+    await target.fetch?.('https://obs.example.com/api/v1/envelope');
+    expect(requests).toHaveLength(0);
+
+    const polyfill = Object.assign(async () => new Response(null), {
+      polyfill: true,
+    }) as unknown as typeof fetch;
+    const { target: untouched } = setupFetch(polyfill);
+    expect(untouched.fetch).toBe(polyfill);
+  });
+
+  it('restores fetch on uninstall', () => {
+    const impl = (async () => new Response(null)) as typeof fetch;
+    const { target, tracker } = setupFetch(impl);
+    expect(target.fetch).not.toBe(impl);
+    tracker.uninstall();
+    expect(target.fetch).toBe(impl);
+  });
+});

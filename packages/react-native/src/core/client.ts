@@ -482,6 +482,7 @@ export class ObservabilityClient {
       onRequest: (request) => this.onRequest(request),
     });
     this.network.install(this.platform.XMLHttpRequest);
+    if (this.platform.fetchTarget) this.network.installFetch(this.platform.fetchTarget);
   }
 
   private onRequest(request: CompletedRequest): void {

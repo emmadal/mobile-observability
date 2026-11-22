@@ -1,0 +1,33 @@
+# Handled errors, promise rejection, requests, events and screen navigation.
+appId: dev.mobileobservability.example
+---
+- launchApp:
+    stopApp: true
+- waitForAnimationToEnd
+- tapOn: "Report handled error"
+- tapOn: "Unhandled promise rejection"
+- tapOn: "GET 200"
+- tapOn: "GET 404"
+- tapOn: "Network failure"
+- scrollUntilVisible:
+    element: "Log checkout event"
+- tapOn: "Log checkout event"
+- scrollUntilVisible:
+    element: "Products (screen metrics)"
+    direction: UP
+- tapOn: "Products (screen metrics)"
+- tapOn: "Product 3"
+- waitForAnimationToEnd
+- back
+- tapOn: "Product 3"
+- waitForAnimationToEnd
+- back
+- back
+- tapOn: "Slow screen"
+- waitForAnimationToEnd
+- back
+- scrollUntilVisible:
+    element: "Flush now"
+- tapOn: "Flush now"
+- waitForAnimationToEnd:
+    timeout: 3000

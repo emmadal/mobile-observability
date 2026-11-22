@@ -181,5 +181,6 @@ export function createReactNativePlatform(): PlatformAdapter {
     nextFrame: (callback) => requestAnimationFrame(() => callback()),
     warn: (message) => console.warn(message),
     XMLHttpRequest: runtime.XMLHttpRequest,
+    fetchTarget: globalThis,
   };
 }

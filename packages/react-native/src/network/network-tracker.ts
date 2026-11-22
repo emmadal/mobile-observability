@@ -57,6 +57,7 @@ export interface NetworkTrackerOptions {
 export class NetworkTracker {
   private readonly recent: CompletedRequest[] = [];
   private restore: (() => void) | null = null;
+  private restoreFetch: (() => void) | null = null;
 
   constructor(private readonly options: NetworkTrackerOptions) {}
 
@@ -109,9 +110,65 @@ export class NetworkTracker {
     };
   }
 
+  /**
+   * Expo replaces global fetch with a native implementation (expo/fetch) that
+   * bypasses XMLHttpRequest, so fetch is wrapped too. React Native's own
+   * polyfill (`fetch.polyfill === true`) runs on XHR and is left alone to
+   * avoid counting requests twice.
+   */
+  installFetch(target: { fetch?: typeof fetch }): void {
+    const original = target.fetch;
+    if (!original || (original as { polyfill?: boolean }).polyfill || this.restoreFetch) return;
+    const tracker = this;
+    const wrapped = async function trackedFetch(input: RequestInfo | URL, init?: RequestInit) {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      if (tracker.options.shouldIgnore(url)) return original(input, init);
+      const method = (
+        init?.method ?? (typeof input === 'object' && 'method' in input ? input.method : 'GET')
+      ).toUpperCase();
+      const startedAt = tracker.options.now();
+      const bytesSent = typeof init?.body === 'string' ? init.body.length : undefined;
+      try {
+        const response = await original(input, init);
+        const length = Number(response.headers?.get?.('content-length') ?? Number.NaN);
+        const now = tracker.options.now();
+        tracker.record({
+          ...sanitizeUrl(url),
+          method,
+          statusCode: response.status,
+          startedAt,
+          // fetch resolves when headers arrive: this is time to first byte.
+          durationMs: Math.max(0, now - startedAt),
+          timeToFirstByteMs: Math.max(0, now - startedAt),
+          ...(Number.isFinite(length) ? { bytesReceived: length } : {}),
+          ...(bytesSent !== undefined ? { bytesSent } : {}),
+        });
+        return response;
+      } catch (error) {
+        const aborted = (error as { name?: string })?.name === 'AbortError';
+        tracker.record({
+          ...sanitizeUrl(url),
+          method,
+          statusCode: 0,
+          startedAt,
+          durationMs: Math.max(0, tracker.options.now() - startedAt),
+          error: aborted ? 'aborted' : 'network error',
+          ...(bytesSent !== undefined ? { bytesSent } : {}),
+        });
+        throw error;
+      }
+    };
+    target.fetch = wrapped as typeof fetch;
+    this.restoreFetch = () => {
+      target.fetch = original;
+    };
+  }
+
   uninstall(): void {
     this.restore?.();
     this.restore = null;
+    this.restoreFetch?.();
+    this.restoreFetch = null;
   }
 
   /** Summary of requests that finished in [from, to], for time-to-interactive params. */
@@ -169,6 +226,10 @@ export class NetworkTracker {
         : {}),
       ...(state.error ? { error: state.error } : {}),
     };
+    this.record(request);
+  }
+
+  private record(request: CompletedRequest): void {
     this.recent.push(request);
     if (this.recent.length > RING_SIZE) this.recent.shift();
     this.options.onRequest(request);

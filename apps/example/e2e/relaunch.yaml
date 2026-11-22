@@ -1,0 +1,7 @@
+# Next launch after a crash: pending reports are sent first.
+appId: dev.mobileobservability.example
+---
+- launchApp:
+    stopApp: true
+- waitForAnimationToEnd:
+    timeout: 8000

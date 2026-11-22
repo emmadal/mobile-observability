@@ -27,6 +27,7 @@ function RootLayout() {
         <Stack.Screen name="products/index" options={{ title: 'Products' }} />
         <Stack.Screen name="products/[id]" options={{ title: 'Product' }} />
         <Stack.Screen name="slow" options={{ title: 'Slow screen' }} />
+        <Stack.Screen name="e2e" options={{ title: 'E2E' }} />
       </Stack>
     </ObserveErrorBoundary>
   );

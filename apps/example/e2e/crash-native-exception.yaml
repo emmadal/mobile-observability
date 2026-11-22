@@ -1,0 +1,7 @@
+# Crashes the app; the report is sent on the next launch (see relaunch.yaml).
+appId: dev.mobileobservability.example
+---
+- launchApp:
+    stopApp: true
+- waitForAnimationToEnd
+- tapOn: Native exception
