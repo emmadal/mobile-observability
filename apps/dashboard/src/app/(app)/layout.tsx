@@ -1,13 +1,14 @@
 import { Suspense } from 'react';
+import { NavLink } from './nav-link';
 import { UserMenu } from './user-menu';
 
 const navigation = [
-  { href: '/', label: 'Overview', current: true },
+  { href: '/', label: 'Overview' },
   { href: '/issues', label: 'Issues', soon: true },
   { href: '/sessions', label: 'Sessions', soon: true },
   { href: '/performance', label: 'Performance', soon: true },
   { href: '/releases', label: 'Releases', soon: true },
-  { href: '/settings', label: 'Settings', soon: true },
+  { href: '/settings', label: 'Settings' },
 ];
 
 export default function AppLayout({ children }: LayoutProps<'/'>) {
@@ -19,25 +20,14 @@ export default function AppLayout({ children }: LayoutProps<'/'>) {
         </p>
         <nav className="mt-6 flex flex-col gap-1">
           {navigation.map((item) => (
-            <span
-              key={item.href}
-              aria-current={item.current ? 'page' : undefined}
-              className="flex items-center justify-between rounded-lg px-2 py-1.5 text-sm text-zinc-600 dark:text-zinc-400"
-            >
-              {item.label}
-              {item.soon && (
-                <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-medium text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
-                  soon
-                </span>
-              )}
-            </span>
+            <NavLink key={item.href} {...item} />
           ))}
         </nav>
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-center justify-between border-b border-zinc-200 px-6 py-3 dark:border-zinc-800">
-          <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">Overview</p>
+          <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">Dashboard</p>
           <Suspense fallback={<span className="text-sm text-zinc-400">…</span>}>
             <UserMenu />
           </Suspense>

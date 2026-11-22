@@ -6,6 +6,7 @@ import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { z } from 'zod';
 import { auth } from '@/lib/auth/server';
+import { slugify } from '@/lib/slug';
 
 const credentialsSchema = z.object({
   email: z.email('Enter a valid email address.'),
@@ -55,15 +56,6 @@ function formError(error: APIError): string {
   const statusCode = Number(error.statusCode ?? 500);
   if (statusCode < 500 && error.message) return error.message;
   return 'Something went wrong. Please try again.';
-}
-
-function slugify(value: string): string {
-  return value
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 48);
 }
 
 export async function signUp(_state: AuthFormState, formData: FormData): Promise<AuthFormState> {

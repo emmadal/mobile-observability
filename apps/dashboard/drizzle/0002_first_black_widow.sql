@@ -1,0 +1,1 @@
+CREATE INDEX "projects_org_created_idx" ON "projects" USING btree ("organization_id","created_at","id");

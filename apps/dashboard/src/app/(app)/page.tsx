@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { Suspense } from 'react';
 import { getCurrentUser } from '@/lib/auth/session';
 
@@ -23,11 +24,16 @@ export default function OverviewPage() {
           <Welcome />
         </Suspense>
         <div className="rounded-xl border border-dashed border-zinc-300 p-6 text-center dark:border-zinc-700">
-          <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">No projects yet</p>
+          <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">Set up a project</p>
           <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-            Create a project to get an ingest key for your app. Project management is the next
-            milestone (T8).
+            Create a project to get an ingest key for your app.
           </p>
+          <Link
+            href="/settings"
+            className="mt-3 inline-block rounded-full bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
+          >
+            Open settings
+          </Link>
         </div>
         <p className="text-xs text-zinc-500 dark:text-zinc-500">
           Install the SDK in your Expo app, upload source maps with{' '}

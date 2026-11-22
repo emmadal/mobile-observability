@@ -15,6 +15,13 @@
       "when": 1795384962350,
       "tag": "0001_fine_whizzer",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1795387247033,
+      "tag": "0002_first_black_widow",
+      "breakpoints": true
     }
   ]
 }

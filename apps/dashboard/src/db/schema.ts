@@ -49,7 +49,11 @@ export const projects = pgTable(
     retentionDays: integer().default(30).notNull(),
     createdAt: createdAt(),
   },
-  (table) => [uniqueIndex('projects_org_slug_idx').on(table.organizationId, table.slug)],
+  (table) => [
+    uniqueIndex('projects_org_slug_idx').on(table.organizationId, table.slug),
+    // Settings list: newest first with the keyset tiebreaker.
+    index('projects_org_created_idx').on(table.organizationId, table.createdAt, table.id),
+  ],
 );
 
 export const apiKeys = pgTable(

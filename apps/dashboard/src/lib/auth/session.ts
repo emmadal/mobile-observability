@@ -9,6 +9,8 @@ export interface SessionUser {
   name: string;
   email: string;
   emailVerified: boolean;
+  /** Organization selected in the session, used to scope project reads. */
+  activeOrganizationId: string | null;
 }
 
 /**
@@ -27,6 +29,7 @@ export async function getSessionUser(): Promise<SessionUser | null> {
     name: session.user.name,
     email: session.user.email,
     emailVerified: session.user.emailVerified,
+    activeOrganizationId: session.session.activeOrganizationId ?? null,
   };
 }
 
