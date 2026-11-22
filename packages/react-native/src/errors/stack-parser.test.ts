@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { parseStack } from './stack-parser';
 
 describe('parseStack', () => {
-  it('parses Hermes release frames (bytecode offsets)', () => {
+  it('parses Hermes release frames, converting 0-based bytecode offsets to 1-based', () => {
     const stack = [
       "TypeError: Cannot read property 'items' of undefined",
       '    at computeCartTotal (address at index.android.bundle:1:184501)',
@@ -10,8 +10,8 @@ describe('parseStack', () => {
       '    at anonymous (native)',
     ].join('\n');
     expect(parseStack(stack)).toEqual([
-      { function: 'computeCartTotal', file: 'index.android.bundle', line: 1, column: 184501 },
-      { function: 'onPress', file: 'index.android.bundle', line: 1, column: 190022 },
+      { function: 'computeCartTotal', file: 'index.android.bundle', line: 1, column: 184502 },
+      { function: 'onPress', file: 'index.android.bundle', line: 1, column: 190023 },
       { function: 'anonymous', native: true, inApp: false },
     ]);
   });

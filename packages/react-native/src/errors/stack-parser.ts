@@ -1,7 +1,7 @@
 import type { FrameInput } from '@mobile-observability/protocol';
 
-// Hermes / V8: "    at fn (file:line:col)", "    at fn (address at file:line:col)", "    at file:line:col"
-const HERMES_V8 = /^\s*at (?:(.+?) \()?(?:address at )?(.+?):(\d+):(\d+)\)?\s*$/;
+// Hermes / V8: "    at fn (file:line:col)", "    at fn (address at file:line:offset)", "    at file:line:col"
+const HERMES_V8 = /^\s*at (?:(.+?) \()?(address at )?(.+?):(\d+):(\d+)\)?\s*$/;
 // Hermes native frames: "    at fn (native)" or "    at [native code]"
 const HERMES_NATIVE = /^\s*at (.+?) \((?:native|\[native code\])\)\s*$/;
 // JavaScriptCore: "fn@file:line:col"
@@ -37,11 +37,14 @@ export function parseStack(stack: string | undefined | null): FrameInput[] {
     if (trimmed.startsWith('at ')) {
       const match = HERMES_V8.exec(trimmed);
       if (match) {
+        // Hermes bytecode offsets ("address at") are 0-based while source columns
+        // are 1-based; normalize to 1-based so the server always subtracts one.
+        const isBytecode = match[2] !== undefined;
         frames.push({
           function: normalizeFunction(match[1]),
-          file: stripQuery(match[2] ?? ''),
-          line: Number(match[3]),
-          column: Number(match[4]),
+          file: stripQuery(match[3] ?? ''),
+          line: Number(match[4]),
+          column: Number(match[5]) + (isBytecode ? 1 : 0),
         });
       }
       continue;
