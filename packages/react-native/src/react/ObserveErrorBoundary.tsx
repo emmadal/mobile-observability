@@ -12,7 +12,11 @@ interface State {
   error: unknown;
 }
 
-/** Reports render errors (with the component stack as a tag) and shows a fallback. */
+/**
+ * Reports render errors (with the component stack as a tag) and shows a
+ * fallback. A class is required here: React has no hooks API for error
+ * boundaries (getDerivedStateFromError / componentDidCatch).
+ */
 export class ObserveErrorBoundary extends Component<ObserveErrorBoundaryProps, State> {
   override state: State = { error: null };
 
