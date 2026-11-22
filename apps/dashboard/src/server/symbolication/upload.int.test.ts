@@ -11,6 +11,7 @@ import {
   ingestRequest,
   resetDatabase,
   type TestProject,
+  toBody,
 } from '../../../test/fixtures';
 import { fixtureMap } from '../../../test/sourcemap-fixture';
 import { handleSourceMapUpload } from './handle-upload';
@@ -32,7 +33,7 @@ const upload = (
     new Request(`http://localhost/api/v1/sourcemaps?${query}`, {
       method: 'POST',
       headers: { authorization: `Bearer ${token}`, ...headers },
-      body,
+      body: toBody(body),
     }),
     db,
   );

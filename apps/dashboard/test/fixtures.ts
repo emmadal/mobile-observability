@@ -26,14 +26,12 @@ export interface TestProject {
 
 export async function createTestProject(name = 'Shop'): Promise<TestProject> {
   const organizationId = randomUUID();
-  await db
-    .insert(organization)
-    .values({
-      id: organizationId,
-      name: `${name} org`,
-      slug: `org-${organizationId}`,
-      createdAt: new Date(),
-    });
+  await db.insert(organization).values({
+    id: organizationId,
+    name: `${name} org`,
+    slug: `org-${organizationId}`,
+    createdAt: new Date(),
+  });
   const [project] = await db
     .insert(projects)
     .values({ organizationId, name, slug: name.toLowerCase() })
@@ -106,6 +104,13 @@ export function ingestRequest(
   return new Request('http://localhost/api/v1/envelope', {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'x-mobs-key': key, ...headers },
-    body: typeof body === 'string' || body instanceof Uint8Array ? body : JSON.stringify(body),
+    body: toBody(body),
   });
+}
+
+/** Request bodies need an ArrayBuffer-backed view; Node Buffers are copied into one. */
+export function toBody(body: unknown): BodyInit {
+  if (typeof body === 'string') return body;
+  if (body instanceof Uint8Array) return new Blob([new Uint8Array(body)]);
+  return JSON.stringify(body);
 }

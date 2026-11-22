@@ -74,13 +74,12 @@ type RejectionOptions = {
 let devRejectionOptions: RejectionOptions | null = null;
 if (__DEV__) {
   try {
-    devRejectionOptions =
-      // biome-ignore lint/suspicious/noReactNativeDeepImports: dev-only, optional; keeps LogBox rejection warnings working.
-      (
-        require('react-native/Libraries/promiseRejectionTrackingOptions') as {
-          default?: RejectionOptions;
-        }
-      ).default ?? null;
+    // Dev only and optional: keeps LogBox rejection warnings working while we track rejections.
+    // biome-ignore lint/suspicious/noReactNativeDeepImports: no public API exposes these options.
+    const tracking = require('react-native/Libraries/promiseRejectionTrackingOptions') as {
+      default?: RejectionOptions;
+    };
+    devRejectionOptions = tracking.default ?? null;
   } catch {
     devRejectionOptions = null;
   }

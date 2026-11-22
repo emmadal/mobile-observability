@@ -12,7 +12,8 @@
       "!**/android",
       "!**/drizzle/meta",
       "!**/src/components/ui",
-      "!**/*.gen.ts"
+      "!**/*.gen.ts",
+      "!apps/example/assets"
     ]
   },
   "formatter": { "enabled": true, "indentStyle": "space", "indentWidth": 2, "lineWidth": 100 },
