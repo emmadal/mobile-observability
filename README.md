@@ -8,7 +8,9 @@ No vendor, no per-seat pricing, no data leaving your infrastructure. Install the
 - **Dashboard** (`apps/dashboard`) — a Next.js 16 (App Router) web app backed by your own Postgres, with email/password auth and organizations (Better Auth).
 - **CLI** (`mobs`) — uploads EAS Update and native source maps so stack traces are symbolicated back to your original code.
 
-**Status: beta (v0.1).** The platform spec and the task roadmap live in [`docs/specs/`](docs/specs/).
+**100% TypeScript.** Every source file — SDK, protocol, CLI, dashboard and example app — is TypeScript with `strict` and `noUncheckedIndexedAccess`; the only hand-written `.js` file is Expo's standard `apps/example/metro.config.js`. The CLI's committed `build/` is `tsc` output, never hand-written JS. Native crash capture is, by necessity, Swift/C on iOS and Kotlin/Java on Android.
+
+**Status: beta (v0.1).** The platform spec and the task roadmap live in [`docs/specs/`](docs/specs/). The SDK is not published to npm yet; the first beta release is tracked as T36.
 
 ---
 
@@ -38,7 +40,7 @@ Three moving parts, one Postgres database:
  │   upload-eas …)     │  sourcemaps     │          │  React Server Components   │
  └─────────────────────┘                 │          ▼                            │
                                          │   Dashboard UI                        │
-                                         │   (Better Auth: accounts, orgs,       │
+                                         │   (accounts, organizations,           │
                                          │    projects, API keys)                │
                                          └───────────────────────────────────────┘
 ```
@@ -53,20 +55,20 @@ Three moving parts, one Postgres database:
 
 ### Repository layout
 
-| Path                    | What it is                                                                                |
-| ----------------------- | ----------------------------------------------------------------------------------------- |
-| `packages/protocol`     | Zod v4 envelope schema shared by the SDK and the server — the single contract             |
-| `packages/react-native` | The SDK: JS core plus iOS and Android native modules                                      |
-| `packages/cli`          | `mobs` — standalone source-map uploader ([emmadal/mobs](https://github.com/emmadal/mobs)) |
-| `apps/dashboard`        | The self-hosted dashboard: Next.js 16 App Router, Tailwind 4, Drizzle, Better Auth        |
-| `apps/example`          | An Expo 58 example app with buttons that deliberately produce every signal                |
-| `docs/specs/`           | The approved platform spec and the task-by-task roadmap                                   |
+| Path                    | What it is                                                                                                |
+| ----------------------- | --------------------------------------------------------------------------------------------------------- |
+| `packages/protocol`     | Zod v4 envelope schema shared by the SDK and the server — the single contract                             |
+| `packages/react-native` | The SDK: JS core plus iOS and Android native modules                                                      |
+| `packages/cli`          | `mobs` — TypeScript source-map uploader compiled to ESM ([emmadal/mobs](https://github.com/emmadal/mobs)) |
+| `apps/dashboard`        | The self-hosted dashboard: Next.js 16 App Router, Tailwind 4, Drizzle, Better Auth                        |
+| `apps/example`          | An Expo 58 example app with buttons that deliberately produce every signal                                |
+| `docs/specs/`           | The approved platform spec and the task-by-task roadmap                                                   |
 
 ### Design rules worth knowing
 
 - **One contract** — the envelope schema is a standalone package; the SDK and the server can evolve without breaking each other.
-- **Server-first dashboard** — every mutation is a Next.js **Server Action** and every page fetches data on the server; there is no client-side data-fetching layer and no public API for the browser to hit.
-- **Fail fast, stay cheap** — ingest enforces hard limits (payload size, event count, cardinality-capped URL templates, retention) so a noisy app or a bad deploy can't take your server down.
+- **Server-first dashboard** — all dashboard data mutations are Next.js **Server Actions** and every page reads data on the server; there is no client-side data-fetching layer and no dashboard data API exposed to the browser. Authentication uses Better Auth's own route handlers.
+- **Fail fast, stay cheap** — ingest enforces hard limits (payload size, event count, cardinality-capped URL templates, retention windows) so a noisy app or a bad deploy can't take your server down.
 - **Private by design** — no request/response bodies, no headers, no query strings, no IP addresses are stored; URLs are path-templated.
 
 ---
@@ -123,8 +125,8 @@ Hardening tips: keep the Postgres port off the public interface (drop the `5433:
 
 ### On company infrastructure
 
-- **External Postgres** (managed or self-managed): point `DATABASE_URL` at it and drop the `db` service. Run the `migrations` target on deploy (`docker compose run --rm migrate`).
-- **Multiple app instances** behind a load balancer: set `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` (base64, 32 bytes) so Server Action encryption keys match across instances, and consider a [shared cache handler](https://nextjs.org/docs/app/building-your-application/caching) for the Next.js cache.
+- **External Postgres** (managed or self-managed): point `DATABASE_URL` at it, remove the local `db` service, and run migrations before starting the app: `docker build --target migrations -t mobs-migrate . && docker run --rm -e DATABASE_URL=postgres://… mobs-migrate`.
+- **Multiple app instances** behind a load balancer: build and run every instance with the same `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` (base64, 16/24/32 bytes) so Server Action encryption keys match, and consider a [shared cache handler](https://nextjs.org/docs/app/building-your-application/caching) for the Next.js cache.
 - **Rolling deployments**: set `deploymentId` in `next.config.ts` to enable version-skew protection.
 - **Email**: no provider ships by default. Verification links are logged in development; wire a provider in `apps/dashboard/src/lib/auth/mailer.ts` and set `MAIL_PROVIDER_CONFIGURED=true`.
 
@@ -139,9 +141,9 @@ Rollback: redeploy the previous commit; database migrations are expand-only per 
 
 ## Using the SDK in your Expo app
 
-```sh
-npx expo install @mobile-observability/react-native
-```
+> **Not on npm yet.** The SDK lives in this repository and `apps/example` consumes it through the pnpm workspace; the first npm beta is tracked as T36. Until then, run the example with `pnpm --filter @mobile-observability/example start` or add your app to `pnpm-workspace.yaml`.
+
+The target API, as used by `apps/example`:
 
 ```tsx
 // app/_layout.tsx
@@ -152,11 +154,16 @@ Observe.configure({
   endpoint: 'https://observability.example.com',
 });
 
-export default ObserveRoot.wrap(
-  <ObserveErrorBoundary fallback={<Fallback />}>
-    <Stack>…</Stack>
-  </ObserveErrorBoundary>,
-);
+function RootLayout() {
+  return (
+    <ObserveErrorBoundary fallback={<Fallback />}>
+      <Stack>…</Stack>
+    </ObserveErrorBoundary>
+  );
+}
+
+// ObserveRoot.wrap takes a component, not an element.
+export default ObserveRoot.wrap(RootLayout);
 ```
 
 What you get out of the box:
@@ -165,7 +172,7 @@ What you get out of the box:
 - **Sessions** — lifecycle-tracked sessions with ok / errored / crashed status.
 - **Performance** — cold/warm launch, bundle load, time-to-render and time-to-interactive.
 - **Network** — `XMLHttpRequest` **and** the native `fetch` (expo/fetch) are tracked with status, timing and sizes; query strings are stripped and paths are templated (`/items/:id`).
-- **Control** — `Observe.logEvent`, `Observe.reportError`, `Observe.setUser`, sampling, `beforeSend`, `ignoreUrls`, and a remote kill switch (`enabled` + sample rates) honored with a 1-hour cache.
+- **Control** — `Observe.logEvent`, `Observe.reportError`, `Observe.setUser`, `Observe.markInteractive`, sampling, `beforeSend`, `ignoreUrls`, and `Observe.dispatchEvents()` to flush on demand.
 
 ## Uploading source maps
 
@@ -185,11 +192,15 @@ mobs sourcemaps upload --platform ios --file ios/index.map \
   --app-version 1.4.2 --build 42
 ```
 
-`mobs` is a standalone, zero-dependency CLI installable from GitHub — full instructions, Expo and bare-RN workflows and `eas.json` integration live in [`packages/cli/README.md`](packages/cli/README.md):
+`mobs` is a standalone, zero-dependency TypeScript CLI installable from GitHub — full instructions, Expo and bare-RN workflows and CI integration live in [`packages/cli/README.md`](packages/cli/README.md):
 
 ```sh
-npm install -g github:emmadal/mobs    # or: npx github:emmadal/mobs --help
+npm install -g --install-links github:emmadal/mobs
+# or run without installing
+npx --yes --package github:emmadal/mobs mobs --help
 ```
+
+> `--install-links` makes npm copy the git checkout instead of symlinking it to a temporary clone that npm then deletes.
 
 ## Privacy and security
 
@@ -210,7 +221,7 @@ pnpm test         # unit + integration tests (dashboard tests use a real Postgre
 
 ## Roadmap
 
-The full, approved plan is [`docs/specs/mobile-observability-platform.tasks.md`](docs/specs/mobile-observability-platform.tasks.md). Shipped so far: the envelope protocol, the SDK core (errors, sessions, network, performance, native crash bridges for iOS and Android), the ingest pipeline (validation, rate limiting, fingerprinting, symbolication), the remote-config kill switch, the `mobs` CLI, the example app with E2E scenarios, and dashboard auth with organizations. Up next: projects and API keys in the UI (T8), the issues list (T13), sessions and performance pages (M3), and hardening (retention jobs, a11y, load tests).
+The full, approved plan is [`docs/specs/mobile-observability-platform.tasks.md`](docs/specs/mobile-observability-platform.tasks.md). Shipped so far: the envelope protocol, the SDK core (errors, sessions, network, performance, native crash bridges for iOS and Android), the ingest pipeline (validation, rate limiting, fingerprinting, symbolication), the remote-config endpoint, the `mobs` CLI, the example app with E2E scenarios, and dashboard auth, organizations, projects and API-key rotation. Up next: the SDK-side kill switch (T29), the issues list (T13), sessions and performance pages (M3), and hardening (retention jobs, a11y, load tests).
 
 ## Contributing
 
