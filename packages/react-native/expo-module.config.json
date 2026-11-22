@@ -1,0 +1,10 @@
+{
+  "platforms": ["apple", "android"],
+  "apple": {
+    "modules": ["MobileObservabilityModule"],
+    "appDelegateSubscribers": ["ObservabilityAppDelegateSubscriber"]
+  },
+  "android": {
+    "modules": ["expo.modules.mobileobservability.MobileObservabilityModule"]
+  }
+}
