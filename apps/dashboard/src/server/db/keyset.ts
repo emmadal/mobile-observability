@@ -67,6 +67,7 @@ export function nextCursor<Row extends { cursorSort: string | Date; cursorId: st
 ): { hasMore: boolean; cursor: Cursor | null } {
   if (page.length <= limit) return { hasMore: false, cursor: null };
   const last = page[limit - 1];
+  if (!last) return { hasMore: false, cursor: null };
   return {
     hasMore: true,
     cursor: {

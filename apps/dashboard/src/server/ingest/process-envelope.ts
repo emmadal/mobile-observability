@@ -227,6 +227,7 @@ async function storeErrors(
     .values(
       [...grouped.values()].map((bucket) => {
         const first = bucket[0];
+        if (!first) throw new Error('Empty fingerprint bucket');
         return {
           projectId: context.projectId,
           fingerprint: first.fingerprint,
