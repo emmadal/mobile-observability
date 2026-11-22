@@ -48,16 +48,27 @@ describe('route helpers', () => {
     expect(resolveUrl('/(tabs)', {})).toBe('/');
   });
 
+  it('never reports query-string params, only dynamic segment params', () => {
+    const state = stack({
+      key: 'k1',
+      name: 'products/[id]',
+      params: { id: '7', ref: 'newsletter', email: 'a@b.c' },
+    });
+    const route = focusedRouteOf(state, { resolveUrl: true, filteredParams: [] });
+    expect(route?.routeParams).toEqual({ id: '7' });
+    expect(route?.url).toBe('/products/7');
+  });
+
   it('removes filtered params and hides the url (AC-34)', () => {
     const state = stack({
       key: 'k1',
-      name: 'profile/[userId]',
-      params: { userId: 'u1', token: 'secret', tab: 'a' },
+      name: 'orgs/[orgId]/users/[userId]',
+      params: { orgId: 'o1', userId: 'u1', tab: 'a' },
     });
-    const route = focusedRouteOf(state, { resolveUrl: true, filteredParams: ['token'] });
+    const route = focusedRouteOf(state, { resolveUrl: true, filteredParams: ['userId'] });
     expect(route).toMatchObject({
-      routeName: '/profile/[userId]',
-      routeParams: { userId: 'u1', tab: 'a' },
+      routeName: '/orgs/[orgId]/users/[userId]',
+      routeParams: { orgId: 'o1' },
       urlHidden: true,
     });
     expect(route?.url).toBeUndefined();

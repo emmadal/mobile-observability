@@ -75,6 +75,13 @@ export function resolveUrl(pattern: string, params: Record<string, unknown>): st
   return resolved.startsWith('/') ? resolved || '/' : `/${resolved}`;
 }
 
+/** Param names of `[id]` and `[...slug]` segments in a route pattern. */
+export function dynamicSegmentKeys(pattern: string): string[] {
+  return [...pattern.matchAll(/\[(?:\.\.\.)?([^\]]+)\]/g)]
+    .map((match) => match[1] ?? '')
+    .filter(Boolean);
+}
+
 export function focusedRouteOf(
   state: NavigationStateLike,
   options: { resolveUrl: boolean; filteredParams: string[] },
@@ -92,9 +99,16 @@ export function focusedRouteOf(
 
   const routeName = routePattern(names);
   const rawParams = (route.params ?? {}) as Record<string, unknown>;
-  const filtered = options.filteredParams.filter((key) => key in rawParams);
+  // Only params that fill dynamic path segments are reported. Query-string
+  // params (which Expo Router merges into route params) are never sent.
+  const segmentKeys = dynamicSegmentKeys(routeName);
+  const filtered = options.filteredParams.filter(
+    (key) => segmentKeys.includes(key) && key in rawParams,
+  );
   const kept = Object.fromEntries(
-    Object.entries(rawParams).filter(([key]) => !options.filteredParams.includes(key)),
+    Object.entries(rawParams).filter(
+      ([key]) => segmentKeys.includes(key) && !options.filteredParams.includes(key),
+    ),
   );
   const focused: FocusedRoute = { key: route.key, routeName, routeParams: toJsonObject(kept) };
   if (options.resolveUrl) {
