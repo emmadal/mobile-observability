@@ -191,12 +191,12 @@ mobs sourcemaps upload --platform ios --file ios/index.map \
   --app-version 1.4.2 --build 42
 ```
 
-`mobs` is a standalone, zero-dependency TypeScript CLI published as `@mobile-observability/cli`. Full instructions, Expo and bare-RN workflows, and CI and Vercel integration live in [`packages/cli/README.md`](packages/cli/README.md):
+`mobs` is a standalone, zero-dependency TypeScript CLI published as `@emmadalorg/cli`. Full instructions, Expo and bare-RN workflows, and CI and Vercel integration live in [`packages/cli/README.md`](packages/cli/README.md):
 
 ```sh
-npm install --save-dev @mobile-observability/cli
+npm install --save-dev @emmadalorg/cli
 # or run without installing
-npx --yes @mobile-observability/cli --help
+npx --yes @emmadalorg/cli --help
 ```
 
 Unreleased changes install from GitHub with `npm install --save-dev --install-links github:emmadal/mobs`.
