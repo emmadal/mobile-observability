@@ -1,23 +1,76 @@
+# Dependencies
 node_modules/
+.pnp
+.pnp.*
+
+# Build output
 dist/
 build/
 # The mobs CLI ships its build output so GitHub installs need no build step.
 !packages/cli/build/
 !packages/cli/build/**
 .next/
-.expo/
+out/
+*.tsbuildinfo
+next-env.d.ts
+*.tgz
+
+# Tool caches
 .turbo/
+.expo/
+.vercel/
+.metro-health-check*
+
+# Tests and benchmarks
 coverage/
+playwright-report/
+test-results/
+perf/out/
+
+# Logs
 *.log
+
+# Environment and secrets
 .env
 .env.*
 !.env.example
-.DS_Store
-*.tsbuildinfo
-playwright-report/
-test-results/
+*.pem
+*.p8
+*.p12
+*.jks
+*.keystore
+*.mobileprovision
+
+# Android (Gradle, Kotlin and NDK caches, machine-specific SDK path)
+.gradle/
+.kotlin/
+.cxx/
+.externalNativeBuild/
+local.properties
+captures/
+*.iml
+
+# iOS (CocoaPods, Xcode user state)
+Pods/
+DerivedData/
+xcuserdata/
+
+# Generated native projects of the example app (expo prebuild)
 apps/example/ios/
 apps/example/android/
-perf/out/
+
+# Editors and OS
+.idea/
+.vscode/
+.DS_Store
+
+# AI coding assistants and agent instruction files
+.claude/
+CLAUDE.md
+CLAUDE.local.md
+AGENTS.md
 .serena/
+.cursor/
+
+# Local-only documents
 docs/
