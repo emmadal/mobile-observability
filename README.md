@@ -10,7 +10,7 @@ No vendor, no per-seat pricing, no data leaving your infrastructure. Install the
 
 **100% TypeScript.** Every source file — SDK, protocol, CLI, dashboard and example app — is TypeScript with `strict` and `noUncheckedIndexedAccess`; the only hand-written `.js` file is Expo's standard `apps/example/metro.config.js`. The CLI's committed `build/` is `tsc` output, never hand-written JS. Native crash capture is, by necessity, Swift/C on iOS and Kotlin/Java on Android.
 
-**Status: beta (v0.1).** The platform spec and the task roadmap live in [`docs/specs/`](docs/specs/). The SDK is not published to npm yet; the first beta release is tracked as T36.
+**Status: beta (v0.1).** The SDK is not published to npm yet.
 
 ---
 
@@ -62,7 +62,6 @@ Three moving parts, one Postgres database:
 | `packages/cli`          | `mobs` — TypeScript source-map uploader compiled to ESM ([emmadal/mobs](https://github.com/emmadal/mobs)) |
 | `apps/dashboard`        | The self-hosted dashboard: Next.js 16 App Router, Tailwind 4, Drizzle, Better Auth                        |
 | `apps/example`          | An Expo 58 example app with buttons that deliberately produce every signal                                |
-| `docs/specs/`           | The approved platform spec and the task-by-task roadmap                                                   |
 
 ### Design rules worth knowing
 
