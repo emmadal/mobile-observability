@@ -2,9 +2,25 @@
   "name": "@mobile-observability/react-native",
   "version": "0.1.0",
   "description": "Crash reporting, error grouping, startup/screen performance and network monitoring for Expo and React Native apps.",
+  "keywords": [
+    "react-native",
+    "expo",
+    "crash-reporting",
+    "error-tracking",
+    "performance",
+    "observability",
+    "monitoring",
+    "expo-observe"
+  ],
   "license": "MIT",
   "author": "mobile-observability",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/emmadal/mobile-observability.git",
+    "directory": "packages/react-native"
+  },
   "homepage": "https://github.com/emmadal/mobile-observability",
+  "bugs": "https://github.com/emmadal/mobile-observability/issues",
   "main": "build/index.js",
   "types": "build/index.d.ts",
   "react-native": "src/index.ts",
@@ -29,12 +45,14 @@
     "android/src",
     "expo-module.config.json",
     "!**/__tests__",
-    "!**/*.test.*"
+    "!**/*.test.*",
+    "!android/src/test"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "node -e \"require('node:fs').rmSync('build',{recursive:true,force:true})\" && tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "prepack": "npm run build"
   },
   "dependencies": {
     "@mobile-observability/protocol": "workspace:*",
@@ -65,5 +83,8 @@
     "react-native": "0.88.1",
     "typescript": "~6.0.3",
     "vitest": "^5.1.1"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

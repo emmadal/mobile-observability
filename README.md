@@ -10,7 +10,7 @@ No vendor, no per-seat pricing, no data leaving your infrastructure. Install the
 
 **100% TypeScript.** Every source file — SDK, protocol, CLI, dashboard and example app — is TypeScript with `strict` and `noUncheckedIndexedAccess`; the only hand-written `.js` file is Expo's standard `apps/example/metro.config.js`. The CLI's committed `build/` is `tsc` output, never hand-written JS. Native crash capture is, by necessity, Swift/C on iOS and Kotlin/Java on Android.
 
-**Status: beta (v0.1).** The SDK is not published to npm yet.
+**Status: beta (v0.1).** On npm: [`@mobile-observability/react-native`](https://www.npmjs.com/package/@mobile-observability/react-native) (SDK), [`@mobile-observability/cli`](https://www.npmjs.com/package/@mobile-observability/cli) (`mobs`) and [`@mobile-observability/protocol`](https://www.npmjs.com/package/@mobile-observability/protocol) (shared schema, installed by the SDK).
 
 ---
 
@@ -140,9 +140,13 @@ Rollback: redeploy the previous commit; database migrations are expand-only per 
 
 ## Using the SDK in your Expo app
 
-> **Not on npm yet.** The SDK lives in this repository and `apps/example` consumes it through the pnpm workspace. Until it is published, run the example with `pnpm --filter @mobile-observability/example start` or add your app to `pnpm-workspace.yaml`.
+```sh
+npx expo install @mobile-observability/react-native
+```
 
-The target API, as used by `apps/example`:
+Then rebuild the native app (`npx expo run:ios` / `run:android`, or a new EAS build). Bare React Native apps run `npx install-expo-modules@latest` once first. Full setup: [`packages/react-native/README.md`](packages/react-native/README.md).
+
+The API, as used by `apps/example`:
 
 ```tsx
 // app/_layout.tsx

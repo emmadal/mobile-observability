@@ -2,12 +2,29 @@
   "name": "@mobile-observability/protocol",
   "version": "0.1.0",
   "description": "Wire protocol (envelope schema, metric names, URL sanitizing) shared by the SDK and the ingest server.",
+  "keywords": [
+    "mobile-observability",
+    "react-native",
+    "expo",
+    "observability",
+    "zod",
+    "schema"
+  ],
   "license": "MIT",
+  "author": "mobile-observability",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/emmadal/mobile-observability.git",
+    "directory": "packages/protocol"
+  },
+  "homepage": "https://github.com/emmadal/mobile-observability/tree/main/packages/protocol#readme",
+  "bugs": "https://github.com/emmadal/mobile-observability/issues",
   "type": "module",
   "sideEffects": false,
   "files": [
     "dist",
-    "src"
+    "src",
+    "!**/*.test.*"
   ],
   "exports": {
     ".": {
@@ -22,9 +39,10 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "prepack": "npm run build"
   },
   "dependencies": {
     "zod": "^4.6.7"
@@ -32,5 +50,8 @@
   "devDependencies": {
     "typescript": "~6.0.3",
     "vitest": "^5.1.1"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }
