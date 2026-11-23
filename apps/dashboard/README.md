@@ -35,4 +35,4 @@ pnpm db:migrate   # apply migrations
 pnpm test         # vitest run (integration tests need Docker Postgres up)
 ```
 
-Next.js 16 differs from earlier releases: before writing code, consult the bundled docs in `node_modules/next/dist/docs/` (see `AGENTS.md`).
+Next.js 16 differs from earlier releases; its documentation ships in `node_modules/next/dist/docs/`.

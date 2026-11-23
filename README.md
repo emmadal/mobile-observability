@@ -192,15 +192,15 @@ mobs sourcemaps upload --platform ios --file ios/index.map \
   --app-version 1.4.2 --build 42
 ```
 
-`mobs` is a standalone, zero-dependency TypeScript CLI installable from GitHub — full instructions, Expo and bare-RN workflows and CI integration live in [`packages/cli/README.md`](packages/cli/README.md):
+`mobs` is a standalone, zero-dependency TypeScript CLI published as `@mobile-observability/cli`. Full instructions, Expo and bare-RN workflows, and CI and Vercel integration live in [`packages/cli/README.md`](packages/cli/README.md):
 
 ```sh
-npm install -g --install-links github:emmadal/mobs
+npm install --save-dev @mobile-observability/cli
 # or run without installing
-npx --yes --package github:emmadal/mobs mobs --help
+npx --yes @mobile-observability/cli --help
 ```
 
-> `--install-links` makes npm copy the git checkout instead of symlinking it to a temporary clone that npm then deletes.
+Unreleased changes install from GitHub with `npm install --save-dev --install-links github:emmadal/mobs`.
 
 ## Privacy and security
 
@@ -217,11 +217,7 @@ pnpm test         # unit + integration tests (dashboard tests use a real Postgre
 
 - Dashboard integration tests run against `TEST_DATABASE_URL` (default `mobs_test` on port 5433); migrations are applied by the Vitest global setup.
 - E2E scenarios for the example app live in `apps/example/e2e/` (Maestro): handled errors, network calls, JS-fatal and native crashes with relaunch.
-- Before writing dashboard code, consult the bundled Next.js 16 docs (`node_modules/next/dist/docs/`) — this Next version has breaking changes relative to older releases; see `apps/dashboard/AGENTS.md`.
-
-## Roadmap
-
-The full, approved plan is [`docs/specs/mobile-observability-platform.tasks.md`](docs/specs/mobile-observability-platform.tasks.md). Shipped so far: the envelope protocol, the SDK core (errors, sessions, network, performance, native crash bridges for iOS and Android), the ingest pipeline (validation, rate limiting, fingerprinting, symbolication), the remote-config endpoint, the `mobs` CLI, the example app with E2E scenarios, and dashboard auth, organizations, projects and API-key rotation. Up next: the SDK-side kill switch (T29), the issues list (T13), sessions and performance pages (M3), and hardening (retention jobs, a11y, load tests).
+- The dashboard targets Next.js 16, whose APIs differ from earlier releases; its documentation ships in `node_modules/next/dist/docs/`.
 
 ## Contributing
 
