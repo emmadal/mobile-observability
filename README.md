@@ -140,7 +140,7 @@ Rollback: redeploy the previous commit; database migrations are expand-only per 
 
 ## Using the SDK in your Expo app
 
-> **Not on npm yet.** The SDK lives in this repository and `apps/example` consumes it through the pnpm workspace; the first npm beta is tracked as T36. Until then, run the example with `pnpm --filter @mobile-observability/example start` or add your app to `pnpm-workspace.yaml`.
+> **Not on npm yet.** The SDK lives in this repository and `apps/example` consumes it through the pnpm workspace. Until it is published, run the example with `pnpm --filter @mobile-observability/example start` or add your app to `pnpm-workspace.yaml`.
 
 The target API, as used by `apps/example`:
 
