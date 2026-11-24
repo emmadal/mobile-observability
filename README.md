@@ -10,8 +10,6 @@ No vendor, no per-seat pricing, no data leaving your infrastructure. Install the
 
 **100% TypeScript.** Every source file — SDK, protocol, CLI, dashboard and example app — is TypeScript with `strict` and `noUncheckedIndexedAccess`; the only hand-written `.js` file is Expo's standard `apps/example/metro.config.js`. The CLI's committed `build/` is `tsc` output, never hand-written JS. Native crash capture is, by necessity, Swift/C on iOS and Kotlin/Java on Android.
 
-**Status: beta (v0.1).** On npm: [`@mobile-observability/react-native`](https://www.npmjs.com/package/@mobile-observability/react-native) (SDK), [`@mobile-observability/cli`](https://www.npmjs.com/package/@mobile-observability/cli) (`mobs`) and [`@mobile-observability/protocol`](https://www.npmjs.com/package/@mobile-observability/protocol) (shared schema, installed by the SDK).
-
 ---
 
 ## Architecture
