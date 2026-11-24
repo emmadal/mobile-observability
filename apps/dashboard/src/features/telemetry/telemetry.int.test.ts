@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { errorEvents, issues, logEvents, metrics, projects, requests, sessions } from '@/db/schema';
+import { getDeviceBreakdown } from '@/features/devices/service';
 import { EVENTS_PAGE_SIZE, getEventDetail, listEvents } from '@/features/events/service';
 import {
   getIssueDetail,
@@ -34,6 +35,9 @@ interface TelemetryExtras {
   appBuild?: string;
   osVersion?: string;
   deviceModel?: string;
+  deviceBrand?: string;
+  deviceLocale?: string;
+  isEmulator?: boolean;
   updateId?: string;
   userId?: string;
   sessionId?: string;
@@ -56,6 +60,9 @@ function context(projectId: string, at: Date, overrides: TelemetryExtras = {}) {
     ...(overrides.routeName === undefined ? {} : { routeName: overrides.routeName }),
     ...(overrides.osVersion === undefined ? {} : { osVersion: overrides.osVersion }),
     ...(overrides.deviceModel === undefined ? {} : { deviceModel: overrides.deviceModel }),
+    ...(overrides.deviceBrand === undefined ? {} : { deviceBrand: overrides.deviceBrand }),
+    ...(overrides.deviceLocale === undefined ? {} : { deviceLocale: overrides.deviceLocale }),
+    ...(overrides.isEmulator === undefined ? {} : { isEmulator: overrides.isEmulator }),
   };
 }
 
@@ -640,6 +647,74 @@ describe('events', () => {
       sessions: 2,
     });
     expect(overview.projects[0]?.logEvents).toBe(3);
+  });
+
+  it('groups performance by device model and OS version', async () => {
+    await addSession(shop.projectId, ago(50), {
+      deviceModel: 'iPhone15,4',
+      deviceBrand: 'Apple',
+      osVersion: '18.1',
+    });
+    await addSession(shop.projectId, ago(40), {
+      deviceModel: 'iPhone15,4',
+      deviceBrand: 'Apple',
+      osVersion: '18.1',
+      status: 'crashed',
+    });
+    await addSession(shop.projectId, ago(30), {
+      deviceModel: 'SM-A145F',
+      deviceBrand: 'Samsung',
+      osVersion: '14',
+      platform: 'android',
+      userId: 'u1',
+    });
+    await addMetric(shop.projectId, ago(20), 'app_startup.cold_launch_time', 900, {
+      deviceModel: 'SM-A145F',
+      deviceBrand: 'Samsung',
+      osVersion: '14',
+      platform: 'android',
+    });
+    const issueId = await addIssue(shop.projectId);
+    await addError(shop.projectId, issueId, ago(10), {
+      deviceModel: 'SM-A145F',
+      deviceBrand: 'Samsung',
+      osVersion: '14',
+      platform: 'android',
+    });
+    // A device seen only through errors (no session row yet) is not listed.
+    await addError(shop.projectId, issueId, ago(5), {
+      deviceModel: 'Pixel 8',
+      osVersion: '15',
+      platform: 'android',
+    });
+
+    const { options, filters, window } = await optionsAndFilters(shop.organizationId);
+    const breakdown = await getDeviceBreakdown(options, filters, window);
+    expect(breakdown.totalDevices).toBe(2);
+    expect(breakdown.models).toBe(2);
+    expect(breakdown.devices.map((device) => device.model)).toEqual(['iPhone15,4', 'SM-A145F']);
+    expect(breakdown.devices[1]).toMatchObject({
+      brand: 'Samsung',
+      osVersion: '14',
+      platform: 'android',
+      sessions: 1,
+      crashedSessions: 0,
+      users: 1,
+      errors: 1,
+      coldLaunchP75: 900,
+      startupSamples: 1,
+    });
+    expect(breakdown.devices[0]).toMatchObject({
+      brand: 'Apple',
+      sessions: 2,
+      crashedSessions: 1,
+      crashFreeRate: 0.5,
+      errors: 0,
+    });
+
+    const ios = await optionsAndFilters(shop.organizationId, { platform: 'ios' });
+    const iosView = await getDeviceBreakdown(ios.options, ios.filters, ios.window);
+    expect(iosView.devices.map((device) => device.model)).toEqual(['iPhone15,4']);
   });
 });
 

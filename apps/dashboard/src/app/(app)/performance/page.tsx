@@ -2,6 +2,7 @@ import type { StartupMetricName } from '@mobile-observability/protocol';
 import Link from 'next/link';
 import { Suspense } from 'react';
 import { HealthBadge, PageHeader, Panel } from '@/components/ui';
+import { type DeviceRow, getDeviceBreakdown } from '@/features/devices/service';
 import {
   parseOverviewFilters,
   rangeLabel,
@@ -33,6 +34,7 @@ const TABS = [
   { key: 'startup', label: 'Startup' },
   { key: 'screens', label: 'Screens' },
   { key: 'network', label: 'Network' },
+  { key: 'devices', label: 'Devices' },
 ] as const;
 type TabKey = (typeof TABS)[number]['key'];
 const DEFAULT_TAB: TabKey = 'startup';
@@ -152,6 +154,9 @@ async function PerformanceContent({
         {tab === 'screens' && <ScreensTab options={options} filters={filters} window={window} />}
         {tab === 'network' && (
           <NetworkTab options={options} filters={filters} window={window} now={now.getTime()} />
+        )}
+        {tab === 'devices' && (
+          <DevicesTab options={options} filters={filters} window={window} now={now.getTime()} />
         )}
       </div>
     </OverviewFrame>
@@ -464,6 +469,153 @@ async function NetworkTab({
 
       <RecentRequests requests={network.recent} now={now} />
     </>
+  );
+}
+
+function DevicesTab({
+  options,
+  filters,
+  window,
+  now,
+}: {
+  options: Awaited<ReturnType<typeof getFilterOptions>>;
+  filters: ReturnType<typeof parseOverviewFilters>;
+  window: ReturnType<typeof resolveWindow>;
+  now: number;
+}) {
+  return <DevicesContent options={options} filters={filters} window={window} now={now} />;
+}
+
+async function DevicesContent({
+  options,
+  filters,
+  window,
+  now,
+}: {
+  options: Awaited<ReturnType<typeof getFilterOptions>>;
+  filters: ReturnType<typeof parseOverviewFilters>;
+  window: ReturnType<typeof resolveWindow>;
+  now: number;
+}) {
+  const breakdown = await getDeviceBreakdown(options, filters, window);
+  return (
+    <>
+      <Panel>
+        <dl className="grid grid-cols-2 divide-line sm:grid-cols-2">
+          <NetworkStat
+            label="Device profiles"
+            value={formatCount(breakdown.totalDevices)}
+            detail="Model + OS combinations"
+          />
+          <NetworkStat
+            label="Device models"
+            value={formatCount(breakdown.models)}
+            detail="Distinct physical models"
+          />
+        </dl>
+      </Panel>
+
+      <Panel
+        title="Performance by device"
+        description={`Sessions, crashes and cold launch per model and OS version. ${rangeLabel(filters.range)}.`}
+      >
+        {breakdown.devices.length === 0 ? (
+          <p className="px-5 pt-3 pb-5 text-sm text-ink-2">
+            No sessions in this range. Devices appear as soon as apps report sessions.
+          </p>
+        ) : (
+          <DeviceTable devices={breakdown.devices} now={now} />
+        )}
+      </Panel>
+    </>
+  );
+}
+
+function DeviceTable({ devices, now }: { devices: DeviceRow[]; now: number }) {
+  return (
+    <div className="mt-3 overflow-x-auto">
+      <table className="w-full min-w-[52rem] text-left text-xs">
+        <thead className="border-y border-line text-ink-3">
+          <tr>
+            <th scope="col" className="w-[34%] px-5 py-2 font-medium">
+              Device
+            </th>
+            <th scope="col" className="px-3 py-2 text-right font-medium">
+              Sessions
+            </th>
+            <th scope="col" className="px-3 py-2 text-right font-medium">
+              Crash-free
+            </th>
+            <th scope="col" className="px-3 py-2 text-right font-medium">
+              Users
+            </th>
+            <th scope="col" className="px-3 py-2 text-right font-medium">
+              Errors
+            </th>
+            <th scope="col" className="px-3 py-2 text-right font-medium">
+              Cold launch P75
+            </th>
+            <th scope="col" className="px-5 py-2 text-right font-medium">
+              Last seen
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {devices.map((device) => (
+            <tr
+              key={`${device.platform}:${device.brand}:${device.model}:${device.osVersion}`}
+              className="border-b border-line last:border-b-0 hover:bg-raised/40"
+            >
+              <td className="max-w-0 px-5 py-2.5">
+                <p className="truncate font-medium text-ink">
+                  {device.brand ?? 'Unknown brand'} {device.model ?? 'Unknown model'}
+                </p>
+                <p className="mt-0.5 text-2xs text-ink-3">
+                  {device.platform === 'ios' ? 'iOS' : 'Android'} {device.osVersion ?? '—'}
+                </p>
+              </td>
+              <td className="px-3 py-2.5 text-right text-ink tabular">
+                {formatCount(device.sessions)}
+              </td>
+              <td className="px-3 py-2.5 text-right whitespace-nowrap tabular">
+                {device.crashFreeRate === null ? (
+                  <span className="text-ink-3">—</span>
+                ) : (
+                  <span
+                    className={
+                      device.crashFreeRate >= 0.995
+                        ? 'text-good'
+                        : device.crashFreeRate >= 0.98
+                          ? 'text-warning'
+                          : 'text-critical'
+                    }
+                  >
+                    {formatPercent(device.crashFreeRate)}
+                  </span>
+                )}
+              </td>
+              <td className="px-3 py-2.5 text-right text-ink-2 tabular">
+                {formatCount(device.users)}
+              </td>
+              <td className="px-3 py-2.5 text-right text-ink-2 tabular">
+                {formatCount(device.errors)}
+              </td>
+              <td className="px-3 py-2.5 text-right whitespace-nowrap text-ink-2 tabular">
+                {device.coldLaunchP75 === null ? '—' : formatDuration(device.coldLaunchP75)}
+              </td>
+              <td className="px-5 py-2.5 text-right whitespace-nowrap text-ink-3 tabular">
+                <time
+                  dateTime={device.lastSeen.toISOString()}
+                  title={formatDateTime(device.lastSeen)}
+                >
+                  {timeAgo(device.lastSeen, now)}
+                </time>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
