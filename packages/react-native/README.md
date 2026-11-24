@@ -4,7 +4,7 @@ Crash reporting, error grouping, sessions, startup and screen performance, and n
 
 The public API mirrors `expo-observe`, so switching is mostly a change of import.
 
-**Status: beta (v0.1).**
+**Status: beta (v0.2).**
 
 ## Requirements
 
@@ -50,15 +50,16 @@ export default ObserveRoot.wrap(RootLayout);
 
 Call `Observe.configure()` at module scope: once the root has mounted it throws. The same options can live in `app.json` under `expo.extra.observability`.
 
-Useful options: `sampleRate` (0 to 1, decided once per installation), `environment`, `beforeSend` (edit or drop an error), `ignoreUrls`, `sessionTimeoutMs`, `dispatchInDebug` (debug builds send nothing unless `true`), `enabled`.
+Useful options: `sampleRate` (0 to 1, decided once per installation), `environment`, `beforeSend` (edit or drop an error), `ignoreUrls`, `sessionTimeoutMs`, `dispatchInDebug` (debug builds send nothing unless `true`), `enabled`. Collection toggles: `errorHandlingEnabled`, `networkTrackingEnabled`, `hangTrackingEnabled` (with `hangThresholdMs`, default 2000) and `resourceSampleIntervalMs` (default 300000, `0` disables).
 
 ## What it records
 
-- **Crashes and errors**: uncaught JS errors, unhandled promise rejections, and native crashes (signals, `NSException`, JVM exceptions). A crash report is sent on the next launch.
-- **Sessions**: lifecycle-tracked sessions with ok, errored and crashed status.
-- **Performance**: cold and warm launch, bundle load, time to first render and time to interactive.
-- **Network**: `XMLHttpRequest` and the native `fetch` (expo/fetch), with status, timing and sizes. Query strings are stripped and paths are templated (`/items/:id`).
+- **Crashes and errors**: uncaught JS errors, unhandled promise rejections, native crashes (signals, `NSException`, JVM exceptions), ANR-like **JS thread hangs** over two seconds, and out-of-memory reports. A crash report is sent on the next launch.
+- **Sessions**: lifecycle-tracked sessions with ok, errored, abnormal and crashed status.
+- **Performance**: cold and warm launch, bundle load, time to first render and time to interactive, plus slow/frozen frame counters and device state (battery, thermal, low power mode) sampled every five minutes as `$device.health` events.
+- **Network**: `XMLHttpRequest` and the native `fetch` (expo/fetch), with status, timing, sizes, **time to first byte** and the **connection type** (wifi, cellular…). Query strings are stripped and paths are templated (`/items/:id`). Every request gets a fresh **W3C trace id** injected as a `traceparent` header, so mobile requests join their backend traces.
 - **Events**: `Observe.logEvent(name, { attributes, body, severity, displayName })`.
+- **Offline**: connectivity transitions are recorded as `$net.offline` / `$net.online` events, and envelopes queue while offline.
 
 ## Screens and navigation
 
@@ -100,7 +101,7 @@ See [`@mobile-observability/cli`](https://www.npmjs.com/package/@mobile-observab
 
 ## Privacy
 
-Request and response bodies, headers, query strings and IP addresses are never collected. URLs are reduced to host and path templates.
+The SDK never reads request or response bodies, headers or query strings, and never sends the device's IP address or location. URLs are reduced to host and path templates. Log-event attribute keys that look like credentials or payment data (`password`, `token`, `card`…) are redacted on device before anything leaves the app. The dashboard itself may record the request IP and CDN geo headers of the ingest call.
 
 ## License
 
