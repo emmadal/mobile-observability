@@ -560,7 +560,7 @@ export class ObservabilityClient {
       isForeground: () => this.appStateStatus !== 'background',
       onHang: (durationMs) => this.reportHang(durationMs),
     });
-    watchdog.start(setInterval, clearInterval);
+    watchdog.start(setInterval);
     this.hangWatchdog = watchdog;
     this.cleanups.push(() => {
       this.hangWatchdog?.stop(clearInterval);

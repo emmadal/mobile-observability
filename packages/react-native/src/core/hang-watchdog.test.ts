@@ -13,11 +13,10 @@ function setup(options: { threshold?: number; foreground?: boolean } = {}) {
   });
   const hangs: number[] = [];
   watchdog.start(
-    ((_handler: () => void, _ms: number) => {
+    ((_handler: () => void) => {
       tick = _handler;
       return 0 as unknown as ReturnType<typeof setInterval>;
     }) as typeof setInterval,
-    (() => undefined) as typeof clearInterval,
   );
   return {
     hangs,

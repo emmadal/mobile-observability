@@ -27,7 +27,8 @@ export class HangWatchdog {
 
   constructor(private readonly options: HangWatchdogOptions) {}
 
-  start(setIntervalFn: typeof setInterval, clearIntervalFn: typeof clearInterval): void {
+  /** Starts ticking; `stop` takes the matching clear function. */
+  start(setIntervalFn: typeof setInterval): void {
     if (this.timer) return;
     const intervalMs = this.options.intervalMs ?? DEFAULT_HANG_INTERVAL_MS;
     this.expectedAt = this.now();
