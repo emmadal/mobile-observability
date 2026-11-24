@@ -35,6 +35,14 @@ export interface UsersPage {
     sessions: number;
     crashedSessions: number;
     errors: number;
+    /** Distinct users with a session in the last 24 h. */
+    dau: number;
+    /** Distinct users with a session in the last 7 days. */
+    wau: number;
+    /** Distinct users with a session in the last 30 days. */
+    mau: number;
+    /** Users whose first-ever session started inside the window. */
+    newUsers: number;
   };
 }
 
@@ -71,7 +79,16 @@ export async function listUsers(
     users: [],
     cursor: null,
     hasMore: false,
-    totals: { users: 0, sessions: 0, crashedSessions: 0, errors: 0 },
+    totals: {
+      users: 0,
+      sessions: 0,
+      crashedSessions: 0,
+      errors: 0,
+      dau: 0,
+      wau: 0,
+      mau: 0,
+      newUsers: 0,
+    },
   };
   const selected = filters.project
     ? options.projects.filter((project) => project.id === filters.project)
@@ -80,6 +97,7 @@ export async function listUsers(
   if (projectIds.length === 0) return empty;
 
   const db = getDb();
+  const nowMs = window.to.getTime();
   const sessionScope = and(
     ...dimensions(sessions, projectIds, filters),
     gte(sessions.startedAt, window.from),
@@ -116,43 +134,93 @@ export async function listUsers(
     ? pageQuery.having(keysetCondition(lastSeen, sessions.userId, cursor, 'timestamptz'))
     : pageQuery;
 
-  const [errorRows, eventRows, summaryRows, rows] = await Promise.all([
-    db
-      .select({ userId: errorEvents.userId, errors: sql<number>`count(*)::int` })
-      .from(errorEvents)
-      .where(
-        and(
-          ...dimensions(errorEvents, projectIds, filters),
-          gte(errorEvents.timestamp, window.from),
-          lt(errorEvents.timestamp, window.to),
-          sql`${errorEvents.userId} is not null`,
+  const [errorRows, eventRows, summaryRows, dauRows, wauRows, mauRows, newUserRows, rows] =
+    await Promise.all([
+      db
+        .select({ userId: errorEvents.userId, errors: sql<number>`count(*)::int` })
+        .from(errorEvents)
+        .where(
+          and(
+            ...dimensions(errorEvents, projectIds, filters),
+            gte(errorEvents.timestamp, window.from),
+            lt(errorEvents.timestamp, window.to),
+            sql`${errorEvents.userId} is not null`,
+          ),
+        )
+        .groupBy(errorEvents.userId),
+      db
+        .select({ userId: logEvents.userId, events: sql<number>`count(*)::int` })
+        .from(logEvents)
+        .where(
+          and(
+            ...dimensions(logEvents, projectIds, filters),
+            gte(logEvents.timestamp, window.from),
+            lt(logEvents.timestamp, window.to),
+            sql`${logEvents.userId} is not null`,
+          ),
+        )
+        .groupBy(logEvents.userId),
+      db
+        .select({
+          users: sql<number>`(count(distinct ${sessions.userId}))::int`,
+          sessions: sql<number>`count(*)::int`,
+          crashed: sql<number>`(count(*) filter (where ${sessions.status} = 'crashed'))::int`,
+        })
+        .from(sessions)
+        .where(sessionScope),
+      getDb()
+        .select({
+          dau: sql<number>`(count(distinct ${sessions.userId}))::int`,
+        })
+        .from(sessions)
+        .where(
+          and(
+            ...dimensions(sessions, projectIds, filters),
+            gte(sessions.startedAt, new Date(nowMs - 24 * 3_600_000)),
+            sql`${sessions.userId} is not null`,
+          ),
         ),
-      )
-      .groupBy(errorEvents.userId),
-    db
-      .select({ userId: logEvents.userId, events: sql<number>`count(*)::int` })
-      .from(logEvents)
-      .where(
-        and(
-          ...dimensions(logEvents, projectIds, filters),
-          gte(logEvents.timestamp, window.from),
-          lt(logEvents.timestamp, window.to),
-          sql`${logEvents.userId} is not null`,
+      getDb()
+        .select({
+          wau: sql<number>`(count(distinct ${sessions.userId}))::int`,
+        })
+        .from(sessions)
+        .where(
+          and(
+            ...dimensions(sessions, projectIds, filters),
+            gte(sessions.startedAt, new Date(nowMs - 7 * 86_400_000)),
+            sql`${sessions.userId} is not null`,
+          ),
         ),
-      )
-      .groupBy(logEvents.userId),
-    db
-      .select({
-        users: sql<number>`(count(distinct ${sessions.userId}))::int`,
-        sessions: sql<number>`count(*)::int`,
-        crashed: sql<number>`(count(*) filter (where ${sessions.status} = 'crashed'))::int`,
-      })
-      .from(sessions)
-      .where(sessionScope),
-    grouped
-      .orderBy(sql`max(${sessions.lastSeenAt}) desc`, sql`${sessions.userId} desc`)
-      .limit(USERS_PAGE_SIZE + 1),
-  ]);
+      getDb()
+        .select({
+          mau: sql<number>`(count(distinct ${sessions.userId}))::int`,
+        })
+        .from(sessions)
+        .where(
+          and(
+            ...dimensions(sessions, projectIds, filters),
+            gte(sessions.startedAt, new Date(nowMs - 30 * 86_400_000)),
+            sql`${sessions.userId} is not null`,
+          ),
+        ),
+      getDb()
+        .select({ newUsers: sql<number>`count(*)::int` })
+        .from(
+          db
+            .select({ userId: sessions.userId })
+            .from(sessions)
+            .where(
+              and(inArray(sessions.projectId, projectIds), sql`${sessions.userId} is not null`),
+            )
+            .groupBy(sessions.userId)
+            .having(sql`min(${sessions.startedAt}) >= ${window.from}`)
+            .as('new_users'),
+        ),
+      grouped
+        .orderBy(sql`max(${sessions.lastSeenAt}) desc`, sql`${sessions.userId} desc`)
+        .limit(USERS_PAGE_SIZE + 1),
+    ]);
 
   const errorsBy = new Map(errorRows.map((row) => [row.userId, Number(row.errors)]));
   const eventsBy = new Map(eventRows.map((row) => [row.userId, Number(row.events)]));
@@ -180,6 +248,10 @@ export async function listUsers(
       sessions: Number(summary?.sessions ?? 0),
       crashedSessions: Number(summary?.crashed ?? 0),
       errors: errorRows.reduce((total, row) => total + Number(row.errors), 0),
+      dau: Number(dauRows[0]?.dau ?? 0),
+      wau: Number(wauRows[0]?.wau ?? 0),
+      mau: Number(mauRows[0]?.mau ?? 0),
+      newUsers: Number(newUserRows[0]?.newUsers ?? 0),
     },
   };
 }

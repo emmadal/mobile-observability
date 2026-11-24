@@ -32,6 +32,7 @@ import { DEFAULT_HANG_THRESHOLD_MS, HangWatchdog } from './hang-watchdog';
 import { isSampledIn, uuid } from './ids';
 import { toJsonObject } from './json';
 import type { AppStateStatus, PlatformAdapter } from './platform';
+import { redactSensitive } from './redact';
 import { type CrashContext, convertPendingReport, type JsFatalReport } from './reports';
 
 export const SDK_INFO = { name: '@mobile-observability/react-native', version: '0.1.1' } as const;
@@ -443,7 +444,9 @@ export class ObservabilityClient {
 
   logEvent(name: string, options: LogEventOptions = {}): void {
     if (!this.dispatching || !name) return;
-    const attributes = options.attributes ? toJsonObject(options.attributes) : undefined;
+    const attributes = options.attributes
+      ? toJsonObject(redactSensitive(options.attributes))
+      : undefined;
     this.enqueue({
       type: 'event',
       eventId: uuid(),
@@ -546,6 +549,7 @@ export class ObservabilityClient {
 
   private onAppStateChange(state: AppStateStatus): void {
     this.appStateStatus = state;
+    this.checkNetworkTransition();
     if (state === 'background') {
       this.logEvent('$app.background', { severity: 'debug' });
       this.addBreadcrumb({ category: 'app_state', message: 'background' });
@@ -593,6 +597,26 @@ export class ObservabilityClient {
     };
     const timer = setInterval(sample, intervalMs);
     this.cleanups.push(() => clearInterval(timer));
+  }
+
+  private lastNetworkConnected: boolean | null = null;
+
+  /**
+   * Connectivity transitions become internal `$net.offline` / `$net.online`
+   * events, so offline windows are visible on the Events page and can be
+   * correlated with failed requests. The first observation only initializes.
+   */
+  private checkNetworkTransition(): void {
+    const { native } = this.platform;
+    if (!native.isAvailable) return;
+    const connected = safeCall(
+      () => native.getDeviceState().networkConnected,
+      undefined as boolean | undefined,
+    );
+    if (connected === undefined || connected === this.lastNetworkConnected) return;
+    const wentOffline = this.lastNetworkConnected !== null && !connected;
+    this.lastNetworkConnected = connected;
+    this.logEvent(wentOffline ? '$net.offline' : '$net.online', { severity: 'debug' });
   }
 
   private installHangWatchdog(thresholdMs: number | undefined): void {
@@ -659,6 +683,7 @@ export class ObservabilityClient {
   }
 
   async flush(): Promise<void> {
+    this.checkNetworkTransition();
     await this.transport?.flush();
   }
 

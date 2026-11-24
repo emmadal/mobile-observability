@@ -733,7 +733,16 @@ describe('users', () => {
 
     const { options, filters, window } = await optionsAndFilters(shop.organizationId);
     const page = await listUsers(options, filters, window, { query: null, cursor: null });
-    expect(page.totals).toEqual({ users: 2, sessions: 4, crashedSessions: 1, errors: 2 });
+    expect(page.totals).toEqual({
+      users: 2,
+      sessions: 4,
+      crashedSessions: 1,
+      errors: 2,
+      dau: 2,
+      wau: 2,
+      mau: 2,
+      newUsers: 2,
+    });
     expect(page.users.map((user) => user.userId)).toEqual(['u-apple', 'u-google']);
     expect(page.users[0]).toMatchObject({
       sessions: 3,

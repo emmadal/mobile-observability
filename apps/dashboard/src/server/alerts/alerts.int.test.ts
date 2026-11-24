@@ -67,7 +67,12 @@ describe('alert evaluation', () => {
   it('fires a crash-free alert below the threshold and recovers', async () => {
     const ruleId = await db
       .insert(alertRules)
-      .values({ projectId: shop.projectId, metric: 'crash_free_rate', window: '1h', threshold: 0.6 })
+      .values({
+        projectId: shop.projectId,
+        metric: 'crash_free_rate',
+        window: '1h',
+        threshold: 0.6,
+      })
       .returning({ id: alertRules.id })
       .then((rows) => rows[0]?.id ?? '');
     await addSession('ok');

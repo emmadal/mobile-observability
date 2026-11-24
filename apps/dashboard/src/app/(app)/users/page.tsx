@@ -82,7 +82,7 @@ async function UsersContent({ searchParams }: Pick<PageProps<'/users'>, 'searchP
     >
       <div className="flex flex-col gap-4 px-5 py-6 sm:px-8">
         <Panel>
-          <dl className="grid grid-cols-2 divide-line sm:grid-cols-4 sm:divide-x">
+          <dl className="grid grid-cols-2 divide-line sm:grid-cols-4 sm:divide-x lg:grid-cols-7">
             <Stat
               label="Users"
               value={formatCount(page.totals.users)}
@@ -106,6 +106,13 @@ async function UsersContent({ searchParams }: Pick<PageProps<'/users'>, 'searchP
                   : formatPercent(1 - page.totals.crashedSessions / page.totals.sessions)
               }
               detail="Identified users only"
+            />
+            <Stat label="DAU" value={formatCount(page.totals.dau)} detail="Active last 24 h" />
+            <Stat label="WAU" value={formatCount(page.totals.wau)} detail="Active last 7 days" />
+            <Stat
+              label="MAU"
+              value={formatCount(page.totals.mau)}
+              detail={`${formatCount(page.totals.newUsers)} new in range`}
             />
           </dl>
         </Panel>
