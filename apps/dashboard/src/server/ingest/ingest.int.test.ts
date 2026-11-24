@@ -118,6 +118,38 @@ describe('ingest processing', () => {
     });
   });
 
+  it('captures the client ip and geo headers at ingest', async () => {
+    await send(envelope([errorItem({ sessionId: 's-geo' })]), {
+      'x-forwarded-for': '203.0.113.7, 10.0.0.1',
+      'x-vercel-ip-country': 'FR',
+      'x-vercel-ip-city': 'Paris',
+    });
+    const [session] = await db.select().from(sessions);
+    expect(session).toMatchObject({
+      clientIp: '203.0.113.7',
+      clientCountry: 'FR',
+      clientCity: 'Paris',
+    });
+
+    // A city header arrives percent-encoded from Vercel.
+    await send(envelope([errorItem({ sessionId: 's-geo-2' })]), {
+      'x-real-ip': '198.51.100.2',
+      'cf-ipcountry': 'US',
+      'x-vercel-ip-city': 'New%20York',
+    });
+    const [second] = await db.select().from(sessions).where(eq(sessions.sessionId, 's-geo-2'));
+    expect(second).toMatchObject({
+      clientIp: '198.51.100.2',
+      clientCountry: 'US',
+      clientCity: 'New York',
+    });
+
+    // Without edge headers nothing is invented.
+    await send(envelope([errorItem({ sessionId: 's-geo-3' })]));
+    const [third] = await db.select().from(sessions).where(eq(sessions.sessionId, 's-geo-3'));
+    expect(third).toMatchObject({ clientIp: null, clientCountry: null, clientCity: null });
+  });
+
   it('shifts timestamps when the device clock is off by more than 60 s (AC-15)', async () => {
     const now = Date.now();
     const skew = 2 * 60 * 60_000; // device two hours behind

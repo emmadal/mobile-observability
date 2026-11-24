@@ -383,6 +383,15 @@ function DevicePanel({ detail }: { detail: SessionDetailView }) {
           label="Environment type"
           value={session.isEmulator === null ? '—' : session.isEmulator ? 'Emulator' : 'Physical'}
         />
+        <Row label="IP address" value={session.clientIp ?? 'Not captured'} mono />
+        <Row
+          label="Location"
+          value={
+            session.clientCountry || session.clientCity
+              ? [session.clientCity, session.clientCountry].filter(Boolean).join(', ')
+              : 'Unknown'
+          }
+        />
         <Row label="App version" value={`${session.appVersion} (${session.appBuild})`} />
         <Row label="Runtime" value={session.runtimeVersion ?? '—'} mono />
         <Row label="Update" value={session.updateId ?? '—'} mono />

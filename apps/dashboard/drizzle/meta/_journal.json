@@ -36,6 +36,13 @@
       "when": 1795524686048,
       "tag": "0004_device-context",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1795524753550,
+      "tag": "0005_client-geo",
+      "breakpoints": true
     }
   ]
 }

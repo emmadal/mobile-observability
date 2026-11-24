@@ -3,6 +3,7 @@ import { parseEnvelope } from '@mobile-observability/protocol/schema';
 import type { Database } from '@/db/client';
 import { resolveKey } from '../keys/resolve';
 import { BodyDecodeError, BodyTooLargeError, decodeBody, readLimitedBody } from './body';
+import { clientContextOf } from './client-context';
 import { processEnvelope } from './process-envelope';
 import { RateLimiter } from './rate-limit';
 
@@ -55,6 +56,12 @@ export async function handleEnvelope(
   if (!parsed.ok)
     return json(400, { error: 'invalid_envelope', issues: parsed.issues.slice(0, 20) });
 
-  const result = await processEnvelope(db, project, parsed.envelope, now());
+  const result = await processEnvelope(
+    db,
+    project,
+    parsed.envelope,
+    now(),
+    clientContextOf(request),
+  );
   return json(202, { accepted: result.accepted, dropped: result.dropped + parsed.droppedItems });
 }

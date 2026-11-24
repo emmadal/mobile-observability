@@ -27,6 +27,7 @@ import {
   type SymbolicatedFrame,
   symbolicateFrames,
 } from '../symbolication/symbolicator';
+import type { ClientContext } from './client-context';
 import { computeFingerprint, culpritOf } from './fingerprint';
 
 type Transaction = Parameters<Parameters<Database['transaction']>[0]>[0];
@@ -47,7 +48,7 @@ export function clockSkewOffset(sentAt: number, receivedAt: number): number {
   return Math.abs(skew) > CLOCK_SKEW_THRESHOLD_MS ? skew : 0;
 }
 
-function contextColumns(envelope: Envelope, projectId: string) {
+function contextColumns(envelope: Envelope, projectId: string, client: ClientContext) {
   return {
     projectId,
     installationId: envelope.installationId,
@@ -64,6 +65,9 @@ function contextColumns(envelope: Envelope, projectId: string) {
     runtimeVersion: envelope.app.runtimeVersion ?? null,
     channel: envelope.app.channel ?? null,
     environment: envelope.app.environment,
+    clientIp: client.ip,
+    clientCountry: client.country,
+    clientCity: client.city,
   };
 }
 
@@ -77,6 +81,7 @@ export async function processEnvelope(
   project: ResolvedProject,
   envelope: Envelope,
   receivedAt: number,
+  client: ClientContext = { ip: null, country: null, city: null },
 ): Promise<IngestResult> {
   const offset = clockSkewOffset(envelope.sentAt, receivedAt);
   const oldest = receivedAt - project.retentionDays * DAY_MS;
@@ -105,7 +110,7 @@ export async function processEnvelope(
     else eventItems.push(item);
   }
 
-  const context = contextColumns(envelope, project.projectId);
+  const context = contextColumns(envelope, project.projectId, client);
   const symbolicated = await symbolicateErrors(db, project.projectId, envelope, errors);
 
   await db.transaction(async (tx) => {
@@ -376,6 +381,9 @@ async function upsertErrorSessions(
           deviceModel: context.deviceModel,
           deviceLocale: context.deviceLocale,
           isEmulator: context.isEmulator,
+          clientIp: context.clientIp,
+          clientCountry: context.clientCountry,
+          clientCity: context.clientCity,
           appVersion: context.appVersion,
           appBuild: context.appBuild,
           updateId: context.updateId,
@@ -433,6 +441,9 @@ async function upsertSession(
       deviceModel: context.deviceModel,
       deviceLocale: context.deviceLocale,
       isEmulator: context.isEmulator,
+      clientIp: context.clientIp,
+      clientCountry: context.clientCountry,
+      clientCity: context.clientCity,
       appVersion: context.appVersion,
       appBuild: context.appBuild,
       updateId: context.updateId,

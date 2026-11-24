@@ -139,6 +139,10 @@ const telemetryContext = () => ({
   runtimeVersion: text(),
   channel: text(),
   environment: text().notNull(),
+  /** Client network context captured at the edge (ingest request headers). */
+  clientIp: text(),
+  clientCountry: text(),
+  clientCity: text(),
 });
 
 export const errorEvents = pgTable(
@@ -198,6 +202,10 @@ export const sessions = pgTable(
     updateId: text(),
     runtimeVersion: text(),
     environment: text().notNull(),
+    /** Client network context captured at the edge (ingest request headers). */
+    clientIp: text(),
+    clientCountry: text(),
+    clientCity: text(),
   },
   (table) => [
     uniqueIndex('sessions_project_session_idx').on(table.projectId, table.sessionId),

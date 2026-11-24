@@ -209,6 +209,9 @@ export interface SessionDetail {
   deviceBrand: string | null;
   deviceLocale: string | null;
   isEmulator: boolean | null;
+  clientIp: string | null;
+  clientCountry: string | null;
+  clientCity: string | null;
   appVersion: string;
   appBuild: string;
   updateId: string | null;
@@ -289,6 +292,9 @@ export async function getSessionDetail(
       deviceBrand: sessions.deviceBrand,
       deviceLocale: sessions.deviceLocale,
       isEmulator: sessions.isEmulator,
+      clientIp: sessions.clientIp,
+      clientCountry: sessions.clientCountry,
+      clientCity: sessions.clientCity,
       appVersion: sessions.appVersion,
       appBuild: sessions.appBuild,
       updateId: sessions.updateId,
