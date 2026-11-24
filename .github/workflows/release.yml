@@ -1,0 +1,156 @@
+name: Release
+
+# Push a tag named <package>-v<version> to publish that package to npm and
+# create its GitHub release, e.g. protocol-v0.2.0 or react-native-v0.2.0.
+# npm authenticates this workflow through trusted publishing (OIDC): no npm
+# token is stored in the repository, and each version gets a provenance
+# attestation linking it to this run.
+on:
+  push:
+    tags:
+      - "protocol-v*"
+      - "react-native-v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  checks:
+    uses: ./.github/workflows/ci.yml
+
+  publish:
+    name: Publish to npm and GitHub
+    needs: checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write # create the GitHub release
+      id-token: write # npm trusted publishing and provenance
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          cache: true
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Use an npm with trusted publishing
+        run: npm install --global npm@^11.15.0 && npm --version
+      - run: pnpm install --frozen-lockfile
+
+      - name: Resolve the package from the tag
+        id: pkg
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          if [[ ! "$TAG" =~ ^(protocol|react-native)-v([0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?)$ ]]; then
+            echo "::error::Tag $TAG is not <protocol|react-native>-v<semver>"
+            exit 1
+          fi
+          dir="packages/${BASH_REMATCH[1]}"
+          version="${BASH_REMATCH[2]}"
+          name=$(node -p "require('./$dir/package.json').name")
+          manifest_version=$(node -p "require('./$dir/package.json').version")
+          if [ "$manifest_version" != "$version" ]; then
+            echo "::error::Tag $TAG does not match $dir/package.json version $manifest_version"
+            exit 1
+          fi
+          if [[ "$version" == *-* ]]; then dist_tag=next; else dist_tag=latest; fi
+          {
+            echo "dir=$dir"
+            echo "name=$name"
+            echo "version=$version"
+            echo "dist_tag=$dist_tag"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Pack
+        id: pack
+        env:
+          DIR: ${{ steps.pkg.outputs.dir }}
+        run: |
+          # pnpm pack runs prepack (a clean build) and rewrites workspace:* to exact versions.
+          mkdir -p "$RUNNER_TEMP/pack"
+          (cd "$DIR" && pnpm pack --pack-destination "$RUNNER_TEMP/pack")
+          tarball=$(ls "$RUNNER_TEMP"/pack/*.tgz)
+          echo "tarball=$tarball" >> "$GITHUB_OUTPUT"
+          tar -tzf "$tarball"
+
+      - name: Wait for workspace dependencies on npm
+        env:
+          TARBALL: ${{ steps.pack.outputs.tarball }}
+        run: |
+          # A package must not go live before the workspace packages it pins.
+          # shellcheck disable=SC2016 # the single-quoted script is JavaScript
+          deps=$(tar -xzOf "$TARBALL" package/package.json | node -e '
+            const pkg = JSON.parse(require("fs").readFileSync(0, "utf8"));
+            for (const [name, range] of Object.entries(pkg.dependencies ?? {}))
+              if (name.startsWith("@mobile-observability/")) console.log(`${name}@${range}`);
+          ')
+          for dep in $deps; do
+            for attempt in $(seq 1 60); do
+              if [ -n "$(npm view "$dep" version 2>/dev/null)" ]; then
+                echo "$dep is on npm"
+                continue 2
+              fi
+              echo "Waiting for $dep ($attempt/60)"
+              sleep 20
+            done
+            echo "::error::$dep is not on npm; push its tag first"
+            exit 1
+          done
+
+      - name: Publish to npm
+        env:
+          NAME: ${{ steps.pkg.outputs.name }}
+          VERSION: ${{ steps.pkg.outputs.version }}
+          DIST_TAG: ${{ steps.pkg.outputs.dist_tag }}
+          TARBALL: ${{ steps.pack.outputs.tarball }}
+        run: |
+          if [ -n "$(npm view "$NAME@$VERSION" version 2>/dev/null)" ]; then
+            echo "$NAME@$VERSION is already on npm; skipping publish"
+          else
+            npm publish "$TARBALL" --access public --provenance --tag "$DIST_TAG"
+          fi
+
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          DIR: ${{ steps.pkg.outputs.dir }}
+          NAME: ${{ steps.pkg.outputs.name }}
+          VERSION: ${{ steps.pkg.outputs.version }}
+          DIST_TAG: ${{ steps.pkg.outputs.dist_tag }}
+          TARBALL: ${{ steps.pack.outputs.tarball }}
+        run: |
+          notes="$RUNNER_TEMP/notes.md"
+          # The release notes are the CHANGELOG section for this version.
+          awk -v version="$VERSION" '
+            $0 == "## " version { found = 1; next }
+            found && /^## / { exit }
+            found { print }
+          ' "$DIR/CHANGELOG.md" > "$notes"
+          if [ ! -s "$notes" ]; then
+            echo "::error::$DIR/CHANGELOG.md has no '## $VERSION' section"
+            exit 1
+          fi
+          # shellcheck disable=SC2016 # the backticks are Markdown, not command substitution
+          printf '\n---\n\n```sh\nnpm install %s@%s\n```\n\nPublished from this tag with npm provenance: https://www.npmjs.com/package/%s/v/%s\n' \
+            "$NAME" "$VERSION" "$NAME" "$VERSION" >> "$notes"
+
+          # The SDK release is the one GitHub shows as Latest.
+          latest=false
+          if [ "$DIR" = "packages/react-native" ] && [ "$DIST_TAG" = latest ]; then latest=true; fi
+          prerelease=()
+          if [ "$DIST_TAG" = next ]; then prerelease=(--prerelease); fi
+
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            gh release edit "$TAG" --title "$NAME $VERSION" --notes-file "$notes" --latest="$latest"
+            gh release upload "$TAG" "$TARBALL" --clobber
+          else
+            gh release create "$TAG" "$TARBALL" --verify-tag --title "$NAME $VERSION" \
+              --notes-file "$notes" --latest="$latest" "${prerelease[@]}"
+          fi
