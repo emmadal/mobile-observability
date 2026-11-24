@@ -23,10 +23,11 @@ import {
   type SessionStatusFilter,
 } from '@/features/sessions/service';
 import {
+  deviceLabel,
   formatCompact,
   formatCount,
   formatElapsed,
-  shortId,
+  osLabel,
   timeAgo,
 } from '@/features/telemetry/format';
 
@@ -287,13 +288,13 @@ function SessionTable({ sessions, now }: { sessions: SessionListItem[]; now: num
               <td className="px-5 py-2.5">
                 <Link
                   href={`/sessions/${session.id}`}
-                  className="font-mono text-xs font-medium text-ink after:absolute after:inset-0 hover:underline focus-visible:after:absolute"
+                  className="font-mono text-xs font-medium wrap-anywhere text-ink after:absolute after:inset-0 hover:underline focus-visible:after:absolute"
                 >
-                  {shortId(session.sessionId)}
+                  {session.sessionId}
                 </Link>
                 <p className="text-2xs text-ink-3">
-                  {session.deviceModel ?? 'Unknown device'}
-                  {session.osVersion ? ` · ${session.osVersion}` : ''}
+                  {deviceLabel(session.deviceBrand, session.deviceModel) ?? 'Unknown device'} ·{' '}
+                  {osLabel(session.platform, session.osVersion)}
                 </p>
               </td>
               <td className="px-3 py-2.5 whitespace-nowrap">
@@ -303,10 +304,14 @@ function SessionTable({ sessions, now }: { sessions: SessionListItem[]; now: num
                 />
               </td>
               <td className="px-3 py-2.5 whitespace-nowrap text-ink-2">{session.projectName}</td>
-              <td className="px-3 py-2.5 whitespace-nowrap text-ink-2">
-                {session.appVersion} ({session.appBuild})
+              <td className="px-3 py-2.5 text-ink-2">
+                <span className="whitespace-nowrap">
+                  {session.appVersion} ({session.appBuild})
+                </span>
                 {session.updateId && (
-                  <span className="ml-1 text-2xs text-ink-3">· {shortId(session.updateId)}</span>
+                  <span className="block font-mono text-2xs wrap-anywhere text-ink-3">
+                    update {session.updateId}
+                  </span>
                 )}
               </td>
               <td className="px-3 py-2.5 text-right whitespace-nowrap text-ink-2 tabular">

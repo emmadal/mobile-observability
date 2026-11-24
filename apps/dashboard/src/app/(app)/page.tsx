@@ -270,20 +270,23 @@ function Dashboard({
                       key={issue.id}
                       className="border-b border-line last:border-b-0 hover:bg-raised/40"
                     >
-                      <td className="max-w-0 px-5 py-2.5">
+                      <td className="px-5 py-2.5">
                         <div className="flex items-center gap-2">
                           {issue.fatal && <HealthBadge health="critical" label="Crash" />}
                           {issue.regressed && <HealthBadge health="warning" label="Regressed" />}
                           {issue.status === 'resolved' && (
                             <HealthBadge health="good" label="Resolved" />
                           )}
-                          <span className="truncate font-semibold text-ink">{issue.type}</span>
+                          <span className="wrap-anywhere font-semibold text-ink">{issue.type}</span>
                         </div>
-                        <p className="font-narrow mt-0.5 truncate text-ink-2" title={issue.message}>
+                        <p
+                          className="font-narrow mt-0.5 wrap-anywhere text-ink-2"
+                          title={issue.message}
+                        >
                           {issue.message}
                         </p>
                         {issue.culprit && (
-                          <p className="mt-0.5 truncate font-mono text-2xs text-ink-3">
+                          <p className="mt-0.5 wrap-anywhere font-mono text-2xs text-ink-3">
                             {issue.culprit}
                           </p>
                         )}
@@ -320,7 +323,7 @@ function Dashboard({
               return (
                 <li key={project.id} className="border-b border-line px-5 py-3 last:border-b-0">
                   <div className="flex items-center justify-between gap-3">
-                    <span className="truncate font-semibold text-ink">{project.name}</span>
+                    <span className="wrap-anywhere font-semibold text-ink">{project.name}</span>
                     {!project.sdkEnabled ? (
                       <HealthBadge health="warning" label="SDK paused" />
                     ) : projectStatus ? (
@@ -380,16 +383,16 @@ function Dashboard({
                       key={event.name}
                       className="border-b border-line last:border-b-0 hover:bg-raised/40"
                     >
-                      <td className="max-w-0 px-5 py-2.5">
+                      <td className="px-5 py-2.5">
                         <Link
                           href={`/events/detail?${query.toString()}`}
-                          className="block truncate font-mono font-semibold text-ink hover:underline"
+                          className="block wrap-anywhere font-mono font-semibold text-ink hover:underline"
                           title={event.name}
                         >
                           {event.name}
                         </Link>
                         {event.displayName && (
-                          <p className="font-narrow mt-0.5 truncate text-2xs text-ink-2">
+                          <p className="font-narrow mt-0.5 wrap-anywhere text-2xs text-ink-2">
                             {event.displayName}
                           </p>
                         )}

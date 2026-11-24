@@ -110,7 +110,7 @@ async function UserContent({ searchParams }: Pick<PageProps<'/users/detail'>, 's
                         project: project.id,
                         q: userId,
                       }).toString()}`}
-                      className="truncate font-medium text-ink hover:underline"
+                      className="wrap-anywhere font-medium text-ink hover:underline"
                     >
                       {project.name}
                     </Link>
@@ -155,7 +155,7 @@ function Stat({ label, value, detail }: { label: string; value: string; detail: 
     <div className="flex flex-col gap-1 border-line px-5 py-4 max-sm:border-b max-sm:odd:border-r">
       <dt className="text-xs text-ink-3">{label}</dt>
       <dd className="font-wide text-sm font-semibold tracking-tight text-ink">{value}</dd>
-      <dd className="truncate text-2xs text-ink-3" title={detail}>
+      <dd className="wrap-anywhere text-2xs text-ink-3" title={detail}>
         {detail}
       </dd>
     </div>

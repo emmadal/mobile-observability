@@ -227,6 +227,7 @@ export interface IssueEvent {
   platform: 'ios' | 'android';
   environment: string;
   osVersion: string | null;
+  deviceBrand: string | null;
   deviceModel: string | null;
   userId: string | null;
   sessionId: string | null;
@@ -309,6 +310,7 @@ export async function getIssueDetail(
         platform: errorEvents.platform,
         environment: errorEvents.environment,
         osVersion: errorEvents.osVersion,
+        deviceBrand: errorEvents.deviceBrand,
         deviceModel: errorEvents.deviceModel,
         userId: errorEvents.userId,
         sessionId: errorEvents.sessionId,

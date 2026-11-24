@@ -71,9 +71,9 @@ export function NetworkTable({ network, now }: Props) {
                 key={rowKey(endpoint)}
                 className="border-b border-line last:border-b-0 hover:bg-raised/40"
               >
-                <td className="max-w-0 px-5 py-2.5">
+                <td className="px-5 py-2.5">
                   <p
-                    className="truncate font-mono text-2xs text-ink-2"
+                    className="wrap-anywhere font-mono text-2xs text-ink-2"
                     title={`${endpoint.method} ${endpoint.host}${endpoint.path}`}
                   >
                     <span className="font-semibold text-ink">{endpoint.method}</span>{' '}
@@ -251,9 +251,7 @@ function EndpointSheet({
                       <span className="tabular">· TTFB {formatDuration(request.ttfbMs)}</span>
                     )}
                     {request.traceId && (
-                      <span className="font-mono" title={`trace_id ${request.traceId}`}>
-                        · trace {request.traceId.slice(0, 8)}
-                      </span>
+                      <span className="font-mono wrap-anywhere">· trace {request.traceId}</span>
                     )}
                     {request.sessionRowId && (
                       <a

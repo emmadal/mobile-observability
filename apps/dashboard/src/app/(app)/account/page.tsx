@@ -44,7 +44,7 @@ async function Profile() {
               className="grid grid-cols-[8rem_minmax(0,1fr)] gap-4 border-b border-line px-5 py-3 last:border-b-0"
             >
               <dt className="text-xs text-ink-3">{row.label}</dt>
-              <dd className="truncate text-sm text-ink">{row.value}</dd>
+              <dd className="wrap-anywhere text-sm text-ink">{row.value}</dd>
             </div>
           ))}
         </dl>

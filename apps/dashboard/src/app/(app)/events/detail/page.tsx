@@ -27,10 +27,11 @@ import { getFilterOptions } from '@/features/overview/service';
 import { OverviewToolbar } from '@/features/overview/toolbar';
 import { getOrgContext } from '@/features/projects/access';
 import {
+  deviceLabel,
   formatCount,
   formatDateTime,
+  osLabel,
   platformLabel,
-  shortId,
   timeAgo,
 } from '@/features/telemetry/format';
 
@@ -241,7 +242,7 @@ function Stat({ label, value, detail }: { label: string; value: string; detail: 
     <div className="flex flex-col gap-1 border-line px-5 py-4 max-sm:border-b max-sm:odd:border-r">
       <dt className="text-xs text-ink-3">{label}</dt>
       <dd className="font-wide text-sm font-semibold tracking-tight text-ink">{value}</dd>
-      <dd className="truncate text-2xs text-ink-3" title={detail}>
+      <dd className="wrap-anywhere text-2xs text-ink-3" title={detail}>
         {detail}
       </dd>
     </div>
@@ -335,7 +336,7 @@ function OccurrenceRow({ occurrence, now }: { occurrence: EventOccurrence; now: 
         {occurrence.updateId && (
           <>
             <span aria-hidden="true">·</span>
-            <span className="font-mono">update {shortId(occurrence.updateId)}</span>
+            <span className="font-mono wrap-anywhere">update {occurrence.updateId}</span>
           </>
         )}
         <span aria-hidden="true">·</span>
@@ -356,23 +357,27 @@ function OccurrenceRow({ occurrence, now }: { occurrence: EventOccurrence; now: 
       )}
 
       <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-ink-3">
-        {occurrence.deviceModel && <span>{occurrence.deviceModel}</span>}
-        {occurrence.osVersion && <span>OS {occurrence.osVersion}</span>}
-        {occurrence.userId && <span className="font-mono">user {shortId(occurrence.userId)}</span>}
+        {deviceLabel(occurrence.deviceBrand, occurrence.deviceModel) && (
+          <span>{deviceLabel(occurrence.deviceBrand, occurrence.deviceModel)}</span>
+        )}
+        <span>{osLabel(occurrence.platform, occurrence.osVersion)}</span>
+        {occurrence.userId && (
+          <span className="font-mono wrap-anywhere">user {occurrence.userId}</span>
+        )}
         {occurrence.sessionRowId ? (
           <Link
             href={`/sessions/${occurrence.sessionRowId}`}
-            className="font-mono text-ink-2 hover:text-ink hover:underline"
+            className="font-mono wrap-anywhere text-ink-2 hover:text-ink hover:underline"
           >
-            session {shortId(occurrence.sessionId ?? '')}
+            session {occurrence.sessionId ?? ''}
           </Link>
         ) : (
           occurrence.sessionId && (
             <Link
               href={`/sessions?q=${encodeURIComponent(occurrence.sessionId)}`}
-              className="font-mono text-ink-2 hover:text-ink hover:underline"
+              className="font-mono wrap-anywhere text-ink-2 hover:text-ink hover:underline"
             >
-              session {shortId(occurrence.sessionId)}
+              session {occurrence.sessionId}
             </Link>
           )
         )}
@@ -444,7 +449,7 @@ function AttributesPanel({
                         }`}
                       >
                         <span
-                          className="min-w-0 truncate font-mono text-2xs"
+                          className="min-w-0 wrap-anywhere font-mono text-2xs"
                           title={attribute.value}
                         >
                           {attribute.value || '—'}

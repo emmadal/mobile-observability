@@ -12,7 +12,6 @@ import {
   formatCount,
   formatPercent,
   platformLabel,
-  shortId,
   timeAgo,
 } from '@/features/telemetry/format';
 
@@ -193,7 +192,7 @@ function ReleaseTable({ view, now }: { view: ReleasesView; now: number }) {
                 <p className="font-medium text-ink">{releaseLabel(release)}</p>
                 <p className="mt-0.5 text-2xs text-ink-3">
                   {release.updateId ? (
-                    <span className="font-mono">update {shortId(release.updateId)}</span>
+                    <span className="font-mono wrap-anywhere">update {release.updateId}</span>
                   ) : (
                     'Store build'
                   )}
@@ -270,7 +269,7 @@ function Stat({ label, value, detail }: { label: string; value: string; detail: 
     <div className="flex flex-col gap-1 border-line px-5 py-4 max-sm:border-b max-sm:odd:border-r">
       <dt className="text-xs text-ink-3">{label}</dt>
       <dd className="font-wide text-lg font-semibold tracking-tight text-ink">{value}</dd>
-      <dd className="truncate text-2xs text-ink-3" title={detail}>
+      <dd className="wrap-anywhere text-2xs text-ink-3" title={detail}>
         {detail}
       </dd>
     </div>

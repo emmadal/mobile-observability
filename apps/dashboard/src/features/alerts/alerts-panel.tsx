@@ -46,7 +46,7 @@ export function AlertsPanel({
               className="flex flex-wrap items-center justify-between gap-2 border-b border-line px-5 py-3 text-xs last:border-b-0"
             >
               <div className="min-w-0">
-                <p className="truncate">
+                <p className="wrap-anywhere">
                   <span className="font-medium text-ink">{rule.projectName}</span>{' '}
                   <span className="text-ink-2">
                     {ALERT_METRIC_LABELS[rule.metric]} {direction(rule.metric)}{' '}

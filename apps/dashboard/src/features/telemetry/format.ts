@@ -67,3 +67,57 @@ export function platformLabel(platform: string): string {
   if (platform === 'android') return 'Android';
   return platform;
 }
+
+/** Android release for each API level React Native supports. */
+const ANDROID_API_RELEASES: Record<number, string> = {
+  21: '5.0',
+  22: '5.1',
+  23: '6',
+  24: '7.0',
+  25: '7.1',
+  26: '8.0',
+  27: '8.1',
+  28: '9',
+  29: '10',
+  30: '11',
+  31: '12',
+  32: '12L',
+  33: '13',
+  34: '14',
+  35: '15',
+  36: '16',
+};
+
+/**
+ * "Android 14", "iOS 18.1". SDKs running without their native module report the Android API
+ * level (34) instead of the release: those read "Android 14 (API 34)". Android releases stay
+ * below 21, so a bare integer from 21 up is an API level.
+ */
+export function osLabel(platform: string, osVersion: string | null): string {
+  const name = platformLabel(platform);
+  const version = osVersion?.trim();
+  if (!version) return `${name}, version unknown`;
+  if (platform === 'android' && /^\d+$/.test(version) && Number(version) >= 21) {
+    const release = ANDROID_API_RELEASES[Number(version)];
+    return release ? `${name} ${release} (API ${version})` : `${name} API ${version}`;
+  }
+  return `${name} ${version}`;
+}
+
+/**
+ * "Samsung SM-A546E", "Apple iPhone15,2". The brand is skipped when the model already starts
+ * with it ("TECNO KI5q"), and lowercase brands from Build.MANUFACTURER are capitalized.
+ */
+export function deviceLabel(brand: string | null, model: string | null): string | null {
+  const cleanBrand = brand?.trim() || null;
+  const cleanModel = model?.trim() || null;
+  if (!cleanBrand && !cleanModel) return null;
+  if (!cleanBrand) return cleanModel;
+  const displayBrand =
+    cleanBrand === cleanBrand.toLowerCase()
+      ? cleanBrand.charAt(0).toUpperCase() + cleanBrand.slice(1)
+      : cleanBrand;
+  if (!cleanModel) return displayBrand;
+  if (cleanModel.toLowerCase().startsWith(cleanBrand.toLowerCase())) return cleanModel;
+  return `${displayBrand} ${cleanModel}`;
+}

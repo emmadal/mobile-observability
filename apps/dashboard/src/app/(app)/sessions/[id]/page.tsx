@@ -12,9 +12,11 @@ import {
   type SessionError,
 } from '@/features/sessions/service';
 import {
+  deviceLabel,
   formatCount,
   formatDateTime,
   formatElapsed,
+  osLabel,
   platformLabel,
   shortId,
 } from '@/features/telemetry/format';
@@ -153,7 +155,7 @@ function Stat({ label, value, detail }: { label: string; value: ReactNode; detai
     <div className="flex flex-col gap-1 border-line px-5 py-4 max-sm:border-b max-sm:odd:border-r">
       <dt className="text-xs text-ink-3">{label}</dt>
       <dd className="font-wide text-lg font-semibold tracking-tight text-ink">{value}</dd>
-      <dd className="truncate text-2xs text-ink-3" title={detail}>
+      <dd className="wrap-anywhere text-2xs text-ink-3" title={detail}>
         {detail}
       </dd>
     </div>
@@ -193,9 +195,9 @@ function ErrorRow({ error }: { error: SessionError }) {
             <span className="font-semibold text-ink">{error.type}</span>
             {error.fatal && <HealthBadge health="critical" label="Fatal" />}
           </div>
-          <p className="font-narrow mt-0.5 truncate text-xs text-ink-2">{error.message}</p>
+          <p className="font-narrow mt-0.5 wrap-anywhere text-xs text-ink-2">{error.message}</p>
           {error.routeName && (
-            <p className="mt-0.5 truncate font-mono text-2xs text-ink-3">{error.routeName}</p>
+            <p className="mt-0.5 wrap-anywhere font-mono text-2xs text-ink-3">{error.routeName}</p>
           )}
         </div>
         <time
@@ -280,13 +282,18 @@ function RequestsPanel({ detail }: { detail: SessionDetailView }) {
             <tbody>
               {detail.requests.map((request) => (
                 <tr key={request.id} className="border-b border-line last:border-b-0">
-                  <td className="max-w-0 px-5 py-2">
-                    <p className="truncate font-mono text-2xs text-ink-2">
+                  <td className="px-5 py-2">
+                    <p className="wrap-anywhere font-mono text-2xs text-ink-2">
                       {request.method} {request.host}
                       {request.path}
                     </p>
                     {request.error && (
-                      <p className="truncate text-2xs text-critical">{request.error}</p>
+                      <p className="wrap-anywhere text-2xs text-critical">{request.error}</p>
+                    )}
+                    {request.traceId && (
+                      <p className="font-mono text-2xs wrap-anywhere text-ink-3">
+                        trace {request.traceId}
+                      </p>
                     )}
                   </td>
                   <td className="px-3 py-2 text-right whitespace-nowrap tabular">
@@ -302,14 +309,6 @@ function RequestsPanel({ detail }: { detail: SessionDetailView }) {
                         title="Time to first byte"
                       >
                         TTFB {formatDuration(request.ttfbMs)}
-                      </span>
-                    )}
-                    {request.traceId && (
-                      <span
-                        className="block font-mono text-2xs text-ink-3"
-                        title={`trace_id ${request.traceId}`}
-                      >
-                        {request.traceId.slice(0, 8)}
                       </span>
                     )}
                     {request.networkType && (
@@ -393,15 +392,11 @@ function DevicePanel({ detail }: { detail: SessionDetailView }) {
         <Row label="Installation" value={session.installationId} mono />
         <Row label="Project" value={session.projectName} />
         <Row label="Environment" value={session.environment} />
-        <Row label="Platform" value={session.platform} />
-        <Row label="OS version" value={session.osVersion ?? 'Unknown'} />
+        <Row label="Platform" value={platformLabel(session.platform)} />
+        <Row label="OS version" value={osLabel(session.platform, session.osVersion)} />
         <Row
           label="Device"
-          value={
-            session.deviceBrand || session.deviceModel
-              ? [session.deviceBrand, session.deviceModel].filter(Boolean).join(' ')
-              : 'Unknown'
-          }
+          value={deviceLabel(session.deviceBrand, session.deviceModel) ?? 'Unknown'}
         />
         <Row label="Locale" value={session.deviceLocale ?? '—'} />
         <Row
@@ -433,7 +428,7 @@ function Row({ label, value, mono }: { label: string; value: string; mono?: bool
     <div className="flex items-baseline justify-between gap-3 border-b border-line px-5 py-2 last:border-b-0">
       <dt className="shrink-0 text-ink-3">{label}</dt>
       <dd
-        className={`min-w-0 truncate text-right text-ink-2 ${mono ? 'font-mono text-2xs' : ''}`}
+        className={`min-w-0 wrap-anywhere text-right text-ink-2 ${mono ? 'font-mono text-2xs' : ''}`}
         title={value}
       >
         {value}

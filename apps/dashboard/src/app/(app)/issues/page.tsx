@@ -274,7 +274,7 @@ function IssueTable({ issues, now }: { issues: IssueListItem[]; now: number }) {
               key={issue.id}
               className="relative cursor-pointer border-b border-line last:border-b-0 hover:bg-raised/40"
             >
-              <td className="max-w-0 px-5 py-3">
+              <td className="px-5 py-3">
                 <div className="flex items-center gap-2">
                   {issue.fatal && <HealthBadge health="critical" label="Crash" />}
                   {issue.kind === 'hang' && <HealthBadge health="warning" label="Hang" />}
@@ -290,16 +290,18 @@ function IssueTable({ issues, now }: { issues: IssueListItem[]; now: number }) {
                   <FixBadge origin={issue.origin} />
                   <Link
                     href={`/issues/${issue.id}`}
-                    className="truncate font-semibold text-ink after:absolute after:inset-0 hover:underline"
+                    className="wrap-anywhere font-semibold text-ink after:absolute after:inset-0 hover:underline"
                   >
                     {issue.type}
                   </Link>
                 </div>
-                <p className="font-narrow mt-0.5 truncate text-ink-2" title={issue.message}>
+                <p className="font-narrow mt-0.5 wrap-anywhere text-ink-2" title={issue.message}>
                   {issue.message}
                 </p>
                 {issue.culprit && (
-                  <p className="mt-0.5 truncate font-mono text-2xs text-ink-3">{issue.culprit}</p>
+                  <p className="mt-0.5 wrap-anywhere font-mono text-2xs text-ink-3">
+                    {issue.culprit}
+                  </p>
                 )}
               </td>
               <td className="px-3 py-3 whitespace-nowrap text-ink-2">{issue.projectName}</td>

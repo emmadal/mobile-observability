@@ -71,6 +71,7 @@ export interface EventOccurrence {
   updateId: string | null;
   platform: 'ios' | 'android';
   environment: string;
+  deviceBrand: string | null;
   deviceModel: string | null;
   osVersion: string | null;
   userId: string | null;
@@ -339,6 +340,7 @@ export async function getEventDetail(
         updateId: logEvents.updateId,
         platform: logEvents.platform,
         environment: logEvents.environment,
+        deviceBrand: logEvents.deviceBrand,
         deviceModel: logEvents.deviceModel,
         osVersion: logEvents.osVersion,
         userId: logEvents.userId,

@@ -36,6 +36,7 @@ export interface SessionListItem {
   lastSeenAt: Date;
   platform: 'ios' | 'android';
   osVersion: string | null;
+  deviceBrand: string | null;
   deviceModel: string | null;
   appVersion: string;
   appBuild: string;
@@ -135,6 +136,7 @@ export async function listSessions(
       lastSeenAt: sessions.lastSeenAt,
       platform: sessions.platform,
       osVersion: sessions.osVersion,
+      deviceBrand: sessions.deviceBrand,
       deviceModel: sessions.deviceModel,
       appVersion: sessions.appVersion,
       appBuild: sessions.appBuild,

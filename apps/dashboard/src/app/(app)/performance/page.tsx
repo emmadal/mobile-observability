@@ -26,7 +26,14 @@ import {
   type StatusCodeClass,
 } from '@/features/performance/service';
 import { getOrgContext } from '@/features/projects/access';
-import { formatCount, formatDateTime, formatPercent, timeAgo } from '@/features/telemetry/format';
+import {
+  deviceLabel,
+  formatCount,
+  formatDateTime,
+  formatPercent,
+  osLabel,
+  timeAgo,
+} from '@/features/telemetry/format';
 
 export const metadata = { title: 'Performance' };
 
@@ -531,6 +538,11 @@ async function DevicesContent({
   );
 }
 
+/** The device query groups missing values as '(unknown)'; the label helpers expect null. */
+function known(value: string | null): string | null {
+  return value === '(unknown)' ? null : value;
+}
+
 function DeviceTable({ devices, now }: { devices: DeviceRow[]; now: number }) {
   return (
     <div className="mt-3 overflow-x-auto">
@@ -566,12 +578,12 @@ function DeviceTable({ devices, now }: { devices: DeviceRow[]; now: number }) {
               key={`${device.platform}:${device.brand}:${device.model}:${device.osVersion}`}
               className="border-b border-line last:border-b-0 hover:bg-raised/40"
             >
-              <td className="max-w-0 px-5 py-2.5">
-                <p className="truncate font-medium text-ink">
-                  {device.brand ?? 'Unknown brand'} {device.model ?? 'Unknown model'}
+              <td className="px-5 py-2.5">
+                <p className="wrap-anywhere font-medium text-ink">
+                  {deviceLabel(known(device.brand), known(device.model)) ?? 'Unknown device'}
                 </p>
                 <p className="mt-0.5 text-2xs text-ink-3">
-                  {device.platform === 'ios' ? 'iOS' : 'Android'} {device.osVersion ?? '—'}
+                  {osLabel(device.platform, known(device.osVersion))}
                 </p>
               </td>
               <td className="px-3 py-2.5 text-right text-ink tabular">
@@ -708,9 +720,9 @@ function RecentRequests({ requests, now }: { requests: RecentRequest[]; now: num
             <tbody>
               {requests.map((request) => (
                 <tr key={request.id} className="border-b border-line last:border-b-0">
-                  <td className="max-w-0 px-5 py-2.5">
+                  <td className="px-5 py-2.5">
                     <p
-                      className="truncate font-mono text-2xs"
+                      className="wrap-anywhere font-mono text-2xs"
                       title={`${request.method} ${request.host}${request.path}`}
                     >
                       <span className="font-semibold text-ink">{request.method}</span>{' '}
@@ -720,8 +732,13 @@ function RecentRequests({ requests, now }: { requests: RecentRequest[]; now: num
                       </span>
                     </p>
                     {request.error && (
-                      <p className="truncate text-2xs text-critical" title={request.error}>
+                      <p className="wrap-anywhere text-2xs text-critical" title={request.error}>
                         {request.error}
+                      </p>
+                    )}
+                    {request.traceId && (
+                      <p className="font-mono text-2xs wrap-anywhere text-ink-3">
+                        trace {request.traceId}
                       </p>
                     )}
                   </td>
@@ -753,14 +770,6 @@ function RecentRequests({ requests, now }: { requests: RecentRequest[]; now: num
                         title="Time to first byte"
                       >
                         TTFB {formatDuration(request.ttfbMs)}
-                      </span>
-                    )}
-                    {request.traceId && (
-                      <span
-                        className="block font-mono text-2xs text-ink-3"
-                        title={`trace_id ${request.traceId}`}
-                      >
-                        {request.traceId.slice(0, 8)}
                       </span>
                     )}
                     {request.networkType && (

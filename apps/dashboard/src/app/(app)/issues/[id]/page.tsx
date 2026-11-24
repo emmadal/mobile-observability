@@ -8,11 +8,12 @@ import { HealthBadge, Panel, primaryButtonClass, secondaryButtonClass } from '@/
 import { getIssueDetail, type IssueDetailView, type IssueEvent } from '@/features/issues/service';
 import { getOrgContext } from '@/features/projects/access';
 import {
+  deviceLabel,
   formatCount,
   formatDateTime,
   formatElapsed,
+  osLabel,
   platformLabel,
-  shortId,
   timeAgo,
 } from '@/features/telemetry/format';
 
@@ -62,7 +63,7 @@ async function IssueContent({ params }: Pick<PageProps<'/issues/[id]'>, 'params'
               Issues
             </Link>
             <span aria-hidden="true">/</span>
-            <span className="truncate">{issue.projectName}</span>
+            <span className="wrap-anywhere">{issue.projectName}</span>
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-2">
             <h1 className="font-wide text-xl font-semibold tracking-tight text-ink">
@@ -80,7 +81,7 @@ async function IssueContent({ params }: Pick<PageProps<'/issues/[id]'>, 'params'
           </div>
           <p className="font-narrow mt-1 max-w-3xl text-sm text-ink-2">{issue.message}</p>
           {issue.culprit && (
-            <p className="mt-1 truncate font-mono text-2xs text-ink-3">{issue.culprit}</p>
+            <p className="mt-1 wrap-anywhere font-mono text-2xs text-ink-3">{issue.culprit}</p>
           )}
         </div>
         <IssueActions issueId={issue.id} status={issue.status} />
@@ -246,7 +247,7 @@ function FrameRow({ frame }: { frame: Frame }) {
           {frame.inApp && <span className="text-2xs text-good">in app</span>}
           {frame.native && <span className="text-2xs text-ink-3">native</span>}
         </div>
-        {location && <p className="mt-0.5 truncate text-ink-3">{location}</p>}
+        {location && <p className="mt-0.5 wrap-anywhere text-ink-3">{location}</p>}
       </div>
     </li>
   );
@@ -288,23 +289,27 @@ function OccurrencesPanel({ detail }: { detail: IssueDetailView }) {
                     </time>
                     {event.fatal && <span className="ml-2 text-2xs text-critical">fatal</span>}
                   </td>
-                  <td className="px-3 py-2.5 whitespace-nowrap text-ink-2">
-                    {event.appVersion} ({event.appBuild})
+                  <td className="px-3 py-2.5 text-ink-2">
+                    <span className="whitespace-nowrap">
+                      {event.appVersion} ({event.appBuild})
+                    </span>
                     {event.updateId && (
-                      <span className="ml-1 text-2xs text-ink-3">· {shortId(event.updateId)}</span>
+                      <span className="block font-mono text-2xs wrap-anywhere text-ink-3">
+                        update {event.updateId}
+                      </span>
                     )}
                   </td>
                   <td className="px-3 py-2.5 whitespace-nowrap text-ink-2">
                     {platformLabel(event.platform)}
                   </td>
                   <td className="px-3 py-2.5 whitespace-nowrap text-ink-2">{event.environment}</td>
-                  <td className="px-5 py-2.5 whitespace-nowrap">
+                  <td className="px-5 py-2.5">
                     {event.sessionId ? (
                       <Link
                         href={`/sessions?q=${encodeURIComponent(event.sessionId)}`}
-                        className="text-ink-2 hover:text-ink hover:underline"
+                        className="font-mono text-2xs wrap-anywhere text-ink-2 hover:text-ink hover:underline"
                       >
-                        {shortId(event.sessionId)}
+                        {event.sessionId}
                       </Link>
                     ) : (
                       <span className="text-ink-3">—</span>
@@ -342,7 +347,7 @@ function BreadcrumbsPanel({ detail }: { detail: IssueDetailView }) {
                 {dateTime.format(new Date(crumb.timestamp))}
               </time>
               <span className="capitalize text-ink-3">{crumb.category}</span>
-              <span className="min-w-0 truncate text-ink-2" title={crumb.message}>
+              <span className="min-w-0 wrap-anywhere text-ink-2" title={crumb.message}>
                 {crumb.message}
               </span>
             </li>
@@ -371,8 +376,13 @@ function MetaPanel({ detail }: { detail: IssueDetailView }) {
         {latest?.routeName && <MetaRow label="Route" value={latest.routeName} mono />}
         {latest?.userId && <MetaRow label="User" value={latest.userId} mono />}
         {latest?.updateId && <MetaRow label="Update" value={latest.updateId} mono />}
-        {latest?.osVersion && <MetaRow label="OS" value={latest.osVersion} />}
-        {latest?.deviceModel && <MetaRow label="Device" value={latest.deviceModel} />}
+        {latest && <MetaRow label="OS" value={osLabel(latest.platform, latest.osVersion)} />}
+        {latest && deviceLabel(latest.deviceBrand, latest.deviceModel) && (
+          <MetaRow
+            label="Device"
+            value={deviceLabel(latest.deviceBrand, latest.deviceModel) ?? ''}
+          />
+        )}
       </dl>
     </Panel>
   );
@@ -383,7 +393,7 @@ function MetaRow({ label, value, mono }: { label: string; value: string; mono?: 
     <div className="flex items-baseline justify-between gap-3 border-b border-line px-5 py-2 last:border-b-0">
       <dt className="shrink-0 text-ink-3">{label}</dt>
       <dd
-        className={`min-w-0 truncate text-right text-ink-2 ${mono ? 'font-mono text-2xs' : ''}`}
+        className={`min-w-0 wrap-anywhere text-right text-ink-2 ${mono ? 'font-mono text-2xs' : ''}`}
         title={value}
       >
         {value}
