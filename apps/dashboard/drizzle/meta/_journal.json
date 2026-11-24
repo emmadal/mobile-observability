@@ -43,6 +43,13 @@
       "when": 1795524753550,
       "tag": "0005_client-geo",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1795525514088,
+      "tag": "0006_request-ttfb-trace",
+      "breakpoints": true
     }
   ]
 }

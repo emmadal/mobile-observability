@@ -149,6 +149,8 @@ describe('parseEnvelope', () => {
           path: '/users/:id',
           statusCode: 200,
           durationMs: 87,
+          timeToFirstByteMs: 41,
+          traceId: '4bf92f3577b34da6a3ce929d0e0e4736',
         },
         {
           type: 'event',
@@ -167,6 +169,26 @@ describe('parseEnvelope', () => {
     const result = parseEnvelope({
       ...baseEnvelope(),
       items: [{ type: 'metric', eventId: 'm1', timestamp: 1, name: 'cpu.temp', valueMs: 1 }],
+    });
+    expect(result.ok).toBe(false);
+  });
+
+  it('rejects an oversized trace id on a request', () => {
+    const result = parseEnvelope({
+      ...baseEnvelope(),
+      items: [
+        {
+          type: 'request',
+          eventId: 'r1',
+          timestamp: 1,
+          method: 'GET',
+          host: 'api.example.com',
+          path: '/x',
+          statusCode: 200,
+          durationMs: 1,
+          traceId: `${'a'.repeat(64)}overflow`,
+        },
+      ],
     });
     expect(result.ok).toBe(false);
   });

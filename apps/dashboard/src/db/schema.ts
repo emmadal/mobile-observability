@@ -249,8 +249,11 @@ export const requests = pgTable(
     durationMs: doublePrecision().notNull(),
     bytesReceived: integer(),
     bytesSent: integer(),
+    timeToFirstByteMs: doublePrecision(),
     error: text(),
     routeName: text(),
+    /** W3C trace id propagated by the SDK's `traceparent` header. */
+    traceId: text(),
   },
   (table) => [
     uniqueIndex('requests_project_event_idx').on(table.projectId, table.eventId),

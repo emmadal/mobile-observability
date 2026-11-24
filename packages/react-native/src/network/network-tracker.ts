@@ -1,4 +1,5 @@
 import { sanitizeUrl } from '@mobile-observability/protocol';
+import { traceId, traceparent } from '../core/ids';
 
 export interface CompletedRequest {
   method: string;
@@ -11,6 +12,8 @@ export interface CompletedRequest {
   bytesSent?: number;
   timeToFirstByteMs?: number;
   error?: string;
+  /** W3C trace id propagated to the backend in the `traceparent` header. */
+  traceId?: string;
 }
 
 export interface RequestSummary {
@@ -38,6 +41,7 @@ interface TrackedXhr extends XMLHttpRequest {
     firstByteAt?: number;
     bytesSent?: number;
     error?: string;
+    traceId?: string;
   };
 }
 
@@ -87,6 +91,12 @@ export class NetworkTracker {
       const state = this.__mobs;
       if (state) {
         state.startedAt = tracker.options.now();
+        state.traceId = traceId();
+        try {
+          this.setRequestHeader('traceparent', traceparent(state.traceId));
+        } catch {
+          // Request already sent or headers frozen; the id still records locally.
+        }
         state.bytesSent = typeof body === 'string' ? body.length : undefined;
         const onFailure = (kind: string) => () => {
           state.error = kind;
@@ -128,8 +138,12 @@ export class NetworkTracker {
       ).toUpperCase();
       const startedAt = tracker.options.now();
       const bytesSent = typeof init?.body === 'string' ? init.body.length : undefined;
+      const id = traceId();
+      const headers = new Headers(init?.headers);
+      headers.set('traceparent', traceparent(id));
+      const trackedInit = { ...init, headers };
       try {
-        const response = await original(input, init);
+        const response = await original(input, trackedInit);
         const length = Number(response.headers?.get?.('content-length') ?? Number.NaN);
         const now = tracker.options.now();
         tracker.record({
@@ -142,6 +156,7 @@ export class NetworkTracker {
           timeToFirstByteMs: Math.max(0, now - startedAt),
           ...(Number.isFinite(length) ? { bytesReceived: length } : {}),
           ...(bytesSent !== undefined ? { bytesSent } : {}),
+          traceId: id,
         });
         return response;
       } catch (error) {
@@ -154,6 +169,7 @@ export class NetworkTracker {
           durationMs: Math.max(0, tracker.options.now() - startedAt),
           error: aborted ? 'aborted' : 'network error',
           ...(bytesSent !== undefined ? { bytesSent } : {}),
+          traceId: id,
         });
         throw error;
       }
@@ -225,6 +241,7 @@ export class NetworkTracker {
         ? { timeToFirstByteMs: state.firstByteAt - state.startedAt }
         : {}),
       ...(state.error ? { error: state.error } : {}),
+      ...(state.traceId ? { traceId: state.traceId } : {}),
     };
     this.record(request);
   }

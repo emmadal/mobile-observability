@@ -9,6 +9,7 @@ class FakeXhr {
   status = 0;
   readyState = 0;
   response: unknown = null;
+  requestHeaders: Record<string, string> = {};
   private readonly listeners = new Map<string, Listener[]>();
   private headers: Record<string, string> = {};
 
@@ -16,6 +17,9 @@ class FakeXhr {
     FakeXhr.last = this;
   }
   send(_body?: unknown) {}
+  setRequestHeader(name: string, value: string) {
+    this.requestHeaders[name] = value;
+  }
   addEventListener(type: string, listener: Listener) {
     this.listeners.set(type, [...(this.listeners.get(type) ?? []), listener]);
   }
@@ -76,6 +80,19 @@ describe('NetworkTracker (AC-5)', () => {
       }),
     ]);
     expect(JSON.stringify(requests)).not.toContain('secret');
+  });
+
+  it('injects a W3C traceparent header and records the trace id', () => {
+    const { requests, request } = setup();
+    const xhr = request('GET', 'https://api.example.com/orders');
+    xhr.respond(200);
+    const header = xhr.requestHeaders.traceparent;
+    expect(header).toMatch(/^00-[0-9a-f]{32}-[0-9a-f]{16}-01$/);
+    expect(requests[0]?.traceId).toBe(header?.slice(3, 35));
+    // A second request gets its own trace id.
+    const second = request('GET', 'https://api.example.com/orders');
+    second.respond(200);
+    expect(requests[1]?.traceId).not.toBe(requests[0]?.traceId);
   });
 
   it('records network failures as status 0 with the failure kind', () => {

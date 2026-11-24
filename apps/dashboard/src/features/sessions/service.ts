@@ -255,6 +255,10 @@ export interface SessionRequest {
   path: string;
   statusCode: number;
   durationMs: number;
+  /** Time to first response byte, when captured. */
+  ttfbMs: number | null;
+  /** W3C trace id the SDK propagated upstream. */
+  traceId: string | null;
   error: string | null;
 }
 
@@ -367,6 +371,8 @@ export async function getSessionDetail(
         path: requests.path,
         statusCode: requests.statusCode,
         durationMs: requests.durationMs,
+        ttfbMs: requests.timeToFirstByteMs,
+        traceId: requests.traceId,
         error: requests.error,
       })
       .from(requests)

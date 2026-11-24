@@ -119,6 +119,10 @@ export const requestItemSchema = z.object({
   durationMs: z.number().nonnegative(),
   bytesReceived: z.number().int().nonnegative().optional(),
   bytesSent: z.number().int().nonnegative().optional(),
+  /** Time to first response byte, when the transport exposes it. */
+  timeToFirstByteMs: z.number().nonnegative().optional(),
+  /** W3C trace id the SDK injected upstream via `traceparent`. */
+  traceId: id.optional(),
   error: truncated(256).optional(),
   routeName: truncated(256).optional(),
 });

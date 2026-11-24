@@ -307,6 +307,33 @@ describe('ingest processing', () => {
     expect(row?.path).toBe('/:other');
   });
 
+  it('stores request timings and the propagated trace id', async () => {
+    await send(
+      envelope([
+        {
+          type: 'request',
+          eventId: 'r-trace',
+          timestamp: Date.now(),
+          method: 'POST',
+          host: 'api.example.com',
+          path: '/api/v1/payments',
+          statusCode: 500,
+          durationMs: 1250,
+          timeToFirstByteMs: 1180,
+          traceId: '4bf92f3577b34da6a3ce929d0e0e4736',
+        },
+      ]),
+    );
+    const [row] = await db.select().from(requests).where(eq(requests.eventId, 'r-trace'));
+    expect(row).toMatchObject({
+      method: 'POST',
+      statusCode: 500,
+      durationMs: 1250,
+      timeToFirstByteMs: 1180,
+      traceId: '4bf92f3577b34da6a3ce929d0e0e4736',
+    });
+  });
+
   it('stores events and drops items older than retention', async () => {
     await send(
       envelope([

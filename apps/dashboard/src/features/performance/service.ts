@@ -83,6 +83,10 @@ export interface RecentRequest {
   path: string;
   statusCode: number;
   durationMs: number;
+  /** Time to first response byte, when captured. */
+  ttfbMs: number | null;
+  /** W3C trace id the SDK propagated upstream. */
+  traceId: string | null;
   /** Transport-level failure, e.g. a timeout; null when the server answered. */
   error: string | null;
   projectName: string;
@@ -413,6 +417,8 @@ export async function getNetwork(
         path: requests.path,
         statusCode: requests.statusCode,
         durationMs: requests.durationMs,
+        ttfbMs: requests.timeToFirstByteMs,
+        traceId: requests.traceId,
         error: requests.error,
         projectName: projects.name,
         appVersion: requests.appVersion,

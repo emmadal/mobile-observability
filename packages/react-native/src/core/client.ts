@@ -499,6 +499,10 @@ export class ObservabilityClient {
       ...(this.sessions?.sessionId ? { sessionId: this.sessions.sessionId } : {}),
       ...(request.bytesReceived !== undefined ? { bytesReceived: request.bytesReceived } : {}),
       ...(request.bytesSent !== undefined ? { bytesSent: request.bytesSent } : {}),
+      ...(request.timeToFirstByteMs !== undefined
+        ? { timeToFirstByteMs: Math.round(request.timeToFirstByteMs) }
+        : {}),
+      ...(request.traceId ? { traceId: request.traceId } : {}),
       ...(request.error ? { error: request.error } : {}),
       ...(route ? { routeName: route.routeName } : {}),
     });

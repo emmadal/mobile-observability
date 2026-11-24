@@ -736,6 +736,22 @@ function RecentRequests({ requests, now }: { requests: RecentRequest[]; now: num
                   </td>
                   <td className="px-3 py-2.5 text-right whitespace-nowrap text-ink tabular">
                     {formatDuration(request.durationMs)}
+                    {request.ttfbMs !== null && (
+                      <span
+                        className="block text-2xs text-ink-3 tabular"
+                        title="Time to first byte"
+                      >
+                        TTFB {formatDuration(request.ttfbMs)}
+                      </span>
+                    )}
+                    {request.traceId && (
+                      <span
+                        className="block font-mono text-2xs text-ink-3"
+                        title={`trace_id ${request.traceId}`}
+                      >
+                        {request.traceId.slice(0, 8)}
+                      </span>
+                    )}
                   </td>
                   <td className="px-5 py-2.5 text-right whitespace-nowrap text-ink-3 tabular">
                     <time

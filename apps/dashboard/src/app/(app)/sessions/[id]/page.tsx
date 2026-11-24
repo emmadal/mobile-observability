@@ -290,6 +290,22 @@ function RequestsPanel({ detail }: { detail: SessionDetailView }) {
                   </td>
                   <td className="px-5 py-2 text-right whitespace-nowrap text-ink-2 tabular">
                     {formatDuration(request.durationMs)}
+                    {request.ttfbMs !== null && (
+                      <span
+                        className="block text-2xs text-ink-3 tabular"
+                        title="Time to first byte"
+                      >
+                        TTFB {formatDuration(request.ttfbMs)}
+                      </span>
+                    )}
+                    {request.traceId && (
+                      <span
+                        className="block font-mono text-2xs text-ink-3"
+                        title={`trace_id ${request.traceId}`}
+                      >
+                        {request.traceId.slice(0, 8)}
+                      </span>
+                    )}
                   </td>
                 </tr>
               ))}
