@@ -35,7 +35,7 @@ export async function createAlertRuleAction(formData: FormData): Promise<void> {
   if (!bounds || threshold < bounds.min || threshold > bounds.max) return;
 
   const context = await getOrgContext();
-  if (!context || context.role !== 'owner') return;
+  if (context?.role !== 'owner') return;
   const [project] = await getDb()
     .select({ id: projects.id })
     .from(projects)
@@ -63,7 +63,7 @@ export async function deleteAlertRuleAction(formData: FormData): Promise<void> {
   const ruleId = z.uuid().safeParse(formData.get('ruleId'));
   if (!ruleId.success) return;
   const context = await getOrgContext();
-  if (!context || context.role !== 'owner') return;
+  if (context?.role !== 'owner') return;
 
   await getDb()
     .delete(alertRules)
