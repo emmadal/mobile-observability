@@ -1,4 +1,4 @@
-import { migrate } from 'drizzle-orm/postgres-js/migrator';
+import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import { createDatabase } from './client';
 
 /** Applies pending migrations to DATABASE_URL (or the URL given as the first argument). */
