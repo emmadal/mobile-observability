@@ -73,7 +73,11 @@ jobs:
         id: pack
         env:
           DIR: ${{ steps.pkg.outputs.dir }}
+          NAME: ${{ steps.pkg.outputs.name }}
         run: |
+          # The package compiles against its workspace dependencies' build output
+          # (the SDK imports the protocol's dist types), absent on a fresh checkout.
+          pnpm turbo run build --filter="$NAME^..."
           # pnpm pack runs prepack (a clean build) and rewrites workspace:* to exact versions.
           mkdir -p "$RUNNER_TEMP/pack"
           (cd "$DIR" && pnpm pack --pack-destination "$RUNNER_TEMP/pack")
