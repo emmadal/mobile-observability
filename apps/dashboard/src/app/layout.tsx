@@ -1,15 +1,13 @@
-import type { Metadata } from 'next';
-import { Geist, Geist_Mono } from 'next/font/google';
+import type { Metadata, Viewport } from 'next';
+import { Archivo } from 'next/font/google';
+import { connection } from 'next/server';
 import './globals.css';
 
-const geistSans = Geist({
-  variable: '--font-geist-sans',
+// One family; its width axis separates placards (wide) from dense tables (narrow).
+const archivo = Archivo({
+  variable: '--font-archivo',
   subsets: ['latin'],
-});
-
-const geistMono = Geist_Mono({
-  variable: '--font-geist-mono',
-  subsets: ['latin'],
+  axes: ['wdth'],
 });
 
 export const metadata: Metadata = {
@@ -17,13 +15,21 @@ export const metadata: Metadata = {
     default: 'Mobile Observability',
     template: '%s · Mobile Observability',
   },
-  description: 'Crashes, errors and performance for mobile apps',
+  description: 'Crashes, errors and startup performance for React Native and Expo apps.',
 };
 
-export default function RootLayout({ children }: LayoutProps<'/'>) {
+export const viewport: Viewport = {
+  themeColor: '#121a2b',
+  colorScheme: 'dark',
+};
+
+export default async function RootLayout({ children }: LayoutProps<'/'>) {
+  // Every page renders per request so Next.js can stamp the CSP nonce (set in
+  // src/proxy.ts) on its scripts; a build-time page could not carry it.
+  await connection();
   return (
-    <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
-      <body className="min-h-full flex flex-col">{children}</body>
+    <html lang="en" className={`${archivo.variable} h-full`}>
+      <body className="flex min-h-full flex-col">{children}</body>
     </html>
   );
 }

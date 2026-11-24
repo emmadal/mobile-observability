@@ -1,9 +1,14 @@
 import Link from 'next/link';
 import { Suspense } from 'react';
+import { PageHeader, Panel } from '@/components/ui';
 import { getOrgContext } from '@/features/projects/access';
 import { CreateProjectForm } from '@/features/projects/create-project-form';
 import { ProjectCard } from '@/features/projects/project-card';
 import { listProjects } from '@/features/projects/service';
+import { TeamPanel } from '@/features/team/team-panel';
+import { getRequestOrigin } from '@/lib/request-origin';
+
+export const metadata = { title: 'Settings' };
 
 interface SettingsPageProps {
   searchParams: Promise<{ cursor?: string | string[] }>;
@@ -11,29 +16,46 @@ interface SettingsPageProps {
 
 export default function SettingsPage({ searchParams }: SettingsPageProps) {
   return (
-    <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-6 py-10">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
-          Settings
-        </h1>
-        <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-          Projects, keys and SDK configuration.
-        </p>
-      </div>
-      <Suspense fallback={<div className="h-48 rounded-2xl bg-zinc-100 dark:bg-zinc-900" />}>
+    <>
+      <PageHeader
+        title="Settings"
+        description="Projects, SDK keys and the people who can see this workspace."
+        aside={
+          <nav aria-label="Settings sections" className="flex gap-4 text-xs">
+            <a href="#projects" className="rounded text-ink-2 hover:text-ink">
+              Projects
+            </a>
+            <a href="#team" className="rounded text-ink-2 hover:text-ink">
+              People
+            </a>
+          </nav>
+        }
+      />
+      <Suspense
+        fallback={
+          <div aria-hidden="true" className="flex flex-col gap-4 px-5 py-6 sm:px-8">
+            <div className="h-72 motion-safe:animate-pulse rounded-[10px] border border-line bg-panel" />
+            <div className="h-56 motion-safe:animate-pulse rounded-[10px] border border-line bg-panel" />
+          </div>
+        }
+      >
         <SettingsContent searchParams={searchParams} />
       </Suspense>
-    </div>
+    </>
   );
 }
 
 async function SettingsContent({ searchParams }: SettingsPageProps) {
-  const [{ cursor }, context] = await Promise.all([searchParams, getOrgContext()]);
+  const [{ cursor }, context, origin] = await Promise.all([
+    searchParams,
+    getOrgContext(),
+    getRequestOrigin(),
+  ]);
   if (!context) {
     return (
-      <p className="text-sm text-zinc-600 dark:text-zinc-400">
-        No organization is linked to this account.
-      </p>
+      <div className="px-5 py-8 sm:px-8">
+        <p className="text-sm text-ink-2">This account is not part of a workspace yet.</p>
+      </div>
     );
   }
 
@@ -41,47 +63,57 @@ async function SettingsContent({ searchParams }: SettingsPageProps) {
     context.organizationId,
     typeof cursor === 'string' ? cursor : null,
   );
-  const canRotate = context.role === 'owner';
+  const isOwner = context.role === 'owner';
 
   return (
-    <>
-      <CreateProjectForm />
+    <div className="flex flex-col gap-4 px-5 py-6 sm:px-8">
+      <Panel
+        id="projects"
+        title="Projects"
+        description="Each app has its own project, keys, issues and metrics."
+        className="scroll-mt-6"
+      >
+        <div className="mt-4 border-t border-line">
+          {isOwner && <CreateProjectForm />}
 
-      <section className="flex flex-col gap-3">
-        <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">Projects</h2>
-        {page.projects.length === 0 ? (
-          <p className="rounded-2xl border border-dashed border-zinc-300 p-6 text-sm text-zinc-600 dark:border-zinc-700 dark:text-zinc-400">
-            No projects yet. Create one above to get an ingest key.
-          </p>
-        ) : (
-          page.projects.map((project) => (
-            <ProjectCard key={project.id} project={project} canRotate={canRotate} />
-          ))
-        )}
+          {page.projects.length === 0 ? (
+            <p className="px-5 py-5 text-sm text-ink-2">
+              {isOwner
+                ? 'No projects yet. Name your first app above to get its keys.'
+                : 'No projects yet. The workspace owner creates them.'}
+            </p>
+          ) : (
+            page.projects.map((project) => (
+              <ProjectCard key={project.id} project={project} canRotate={isOwner} />
+            ))
+          )}
 
-        {(cursor || page.hasMore) && (
-          <nav className="flex items-center justify-between text-sm">
-            {cursor ? (
-              <Link
-                href="/settings"
-                className="font-medium text-zinc-900 underline dark:text-white"
-              >
-                ← Newer projects
-              </Link>
-            ) : (
-              <span />
-            )}
-            {page.hasMore && page.cursor ? (
-              <Link
-                href={`/settings?cursor=${encodeURIComponent(page.cursor)}`}
-                className="font-medium text-zinc-900 underline dark:text-white"
-              >
-                Older projects →
-              </Link>
-            ) : null}
-          </nav>
-        )}
-      </section>
-    </>
+          {(cursor || page.hasMore) && (
+            <nav
+              aria-label="Project pages"
+              className="flex items-center justify-between border-t border-line px-5 py-3 text-xs"
+            >
+              {cursor ? (
+                <Link href="/settings" className="rounded font-medium text-ink-2 hover:text-ink">
+                  Newer projects
+                </Link>
+              ) : (
+                <span />
+              )}
+              {page.hasMore && page.cursor ? (
+                <Link
+                  href={`/settings?cursor=${encodeURIComponent(page.cursor)}`}
+                  className="rounded font-medium text-ink-2 hover:text-ink"
+                >
+                  Older projects
+                </Link>
+              ) : null}
+            </nav>
+          )}
+        </div>
+      </Panel>
+
+      <TeamPanel context={context} origin={origin} />
+    </div>
   );
 }

@@ -1,26 +1,122 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/*
+ * Night-shift palette: the chrome stays slate and quiet so that hue only
+ * ever means data (series) or state (good, warning, critical).
+ */
+@theme {
+  --color-night: #121a2b;
+  --color-panel: #182238;
+  --color-raised: #1f2a44;
+  --color-line: #2b3754;
+  --color-line-strong: #3a4868;
+  --color-ink: #e8edf6;
+  --color-ink-2: #aab5cc;
+  --color-ink-3: #8a96b0;
+  --color-focus: #9dbbff;
+
+  /* Data series (validated against the panel surface, single-series charts). */
+  --color-series: #3987e5;
+  --color-series-wash: rgb(57 135 229 / 0.12);
+
+  /* Status: reserved for state, always paired with an icon or a word. */
+  --color-good: #0ca30c;
+  --color-warning: #fab219;
+  --color-critical: #e66767;
+
+  --font-sans: var(--font-archivo), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", "Cascadia Mono", "Roboto Mono", monospace;
+
+  /* Type scale: 12 / 13 / 14 / 16 / 20 / 26 / 52. */
+  --text-2xs: 0.75rem;
+  --text-2xs--line-height: 1rem;
+  --text-xs: 0.8125rem;
+  --text-xs--line-height: 1.15rem;
+  --text-sm: 0.875rem;
+  --text-sm--line-height: 1.3rem;
+  --text-base: 1rem;
+  --text-base--line-height: 1.5rem;
+  --text-lg: 1.25rem;
+  --text-lg--line-height: 1.75rem;
+  --text-xl: 1.625rem;
+  --text-xl--line-height: 2rem;
+  --text-hero: 3.25rem;
+  --text-hero--line-height: 1;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
+@layer base {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    color-scheme: dark;
+  }
+
+  html {
+    background: var(--color-night);
+  }
+
+  body {
+    background: var(--color-night);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-size: var(--text-sm);
+    line-height: var(--text-sm--line-height);
+    font-feature-settings: "ss01";
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::selection {
+    background: rgb(157 187 255 / 0.3);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-focus);
+    outline-offset: 2px;
+    border-radius: 4px;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* Archivo's width axis does the typographic work: wide placards, narrow tables. */
+@utility font-wide {
+  font-stretch: 116%;
+}
+
+@utility font-narrow {
+  font-stretch: 84%;
+}
+
+@utility tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* The sign-in trace draws once on load (pathLength="1" on the path). */
+@keyframes trace-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@utility animate-trace {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: trace-draw 1.6s cubic-bezier(0.65, 0, 0.35, 1) 0.15s forwards;
+}
+
+@keyframes marker-in {
+  from {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@utility animate-marker {
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: marker-in 0.35s ease-out 1.55s forwards;
 }

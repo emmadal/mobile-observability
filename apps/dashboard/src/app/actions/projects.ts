@@ -44,6 +44,7 @@ export async function createProjectAction(
 ): Promise<CreateProjectState> {
   const context = await getOrgContext();
   if (!context) return { error: 'No organization found for this account.' };
+  if (context.role !== 'owner') return { error: 'Only the workspace owner can create projects.' };
 
   const parsed = nameSchema.safeParse({ name: formData.get('name') });
   if (!parsed.success) {

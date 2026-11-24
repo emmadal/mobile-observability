@@ -20,18 +20,17 @@ function hasSessionCookie(request: NextRequest): boolean {
   );
 }
 
-/** A fresh nonce per request; Next.js extracts it from the CSP header and applies it to its own scripts and inline styles. */
+/**
+ * A fresh nonce per request. Next.js reads it from the request's CSP header
+ * and applies it to its own scripts and inline styles while rendering, which
+ * is why pages render dynamically (no prerendered shell could carry it).
+ */
 function buildCsp(): { header: string; nonce: string } {
   const nonce = Buffer.from(crypto.randomUUID()).toString('base64');
   const isDev = process.env.NODE_ENV === 'development';
-  // The PPR completion-time marker lives in the prerendered static shell,
-  // which cannot carry a per-request nonce; allow it by content hash instead.
-  // Re-hash if a Next.js upgrade changes the snippet (check the browser
-  // console for CSP violations): sha256 of "requestAnimationFrame(function(){$RT=performance.now()});"
-  const pprMarker = "'sha256-7mu4H06fwDCjmnxxr/xNHyuQC6pLTHr4M2E4jXw5WZs='";
   const header = `
     default-src 'self';
-    script-src 'self' 'nonce-${nonce}' 'strict-dynamic' ${pprMarker}${isDev ? " 'unsafe-eval'" : ''};
+    script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${isDev ? " 'unsafe-eval'" : ''};
     style-src 'self' 'nonce-${nonce}';
     img-src 'self' blob: data:;
     font-src 'self';
@@ -48,6 +47,8 @@ function buildCsp(): { header: string; nonce: string } {
 function nextWithCsp(request: NextRequest, csp: string, nonce: string): NextResponse {
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set('x-nonce', nonce);
+  // Next.js takes the nonce from the request-side CSP header.
+  requestHeaders.set('Content-Security-Policy', csp);
   const response = NextResponse.next({ request: { headers: requestHeaders } });
   response.headers.set('Content-Security-Policy', csp);
   return response;

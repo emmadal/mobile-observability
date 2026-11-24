@@ -16,8 +16,9 @@ const nextConfig: NextConfig = {
   async headers() {
     return [{ source: '/:path*', headers: securityHeaders }];
   },
-  cacheComponents: true,
-  partialPrefetching: true,
+  // No cacheComponents / partial prerendering: the CSP nonce must be applied
+  // to every script at request time, and a prerendered static shell cannot
+  // carry it (see the Next.js CSP guide). Pages render dynamically.
   turbopack: {
     rules: {
       '*.css': {

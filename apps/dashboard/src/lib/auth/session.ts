@@ -18,8 +18,8 @@ export interface SessionUser {
  * use to read the session. Returns a narrow DTO — never the raw session or
  * user record — so sensitive fields cannot leak into client props.
  *
- * With cacheComponents enabled, session reads are request-time reads: callers
- * must sit behind a <Suspense> boundary.
+ * Session reads are request-time reads: callers sit behind a <Suspense>
+ * boundary so the rest of the page streams first.
  */
 export async function getSessionUser(): Promise<SessionUser | null> {
   const session = await auth.api.getSession({ headers: await headers() });

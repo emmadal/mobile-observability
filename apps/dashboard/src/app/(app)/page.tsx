@@ -1,61 +1,346 @@
+import { METRIC_TARGETS_MS } from '@mobile-observability/protocol';
 import Link from 'next/link';
-import { Suspense } from 'react';
-import { getCurrentUser } from '@/lib/auth/session';
+import { type ReactNode, Suspense } from 'react';
+import { type Health, HealthBadge, PageHeader, Panel, primaryButtonClass } from '@/components/ui';
+import { PulseChart } from '@/features/overview/pulse-chart';
+import { COLD_LAUNCH_METRIC, getOverview, type Overview } from '@/features/overview/service';
+import { getOrgContext } from '@/features/projects/access';
+
+export const metadata = { title: 'Overview' };
+
+const integer = new Intl.NumberFormat('en');
+const compact = new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 });
+const COLD_LAUNCH_TARGET = METRIC_TARGETS_MS[COLD_LAUNCH_METRIC];
 
 /**
- * Overview: the first protected page. The proxy gates anonymous visitors and
- * the layout's UserMenu re-verifies the session; the greeting reads the
- * session again through the DAL, inside a Suspense boundary (request-time
- * read, cacheComponents).
+ * Overview: app health across every project of the workspace for the last 24
+ * hours. All reads are request-time (session, then database), inside Suspense.
  */
 export default function OverviewPage() {
   return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-6 px-6 py-16">
-      <div className="flex w-full max-w-xl flex-col gap-5 rounded-2xl border border-zinc-200 bg-white p-10 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
-        <Suspense
-          fallback={
-            <div>
-              <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
-                Welcome
-              </h1>
+    <>
+      <PageHeader
+        title="Overview"
+        description="App health across every project in this workspace."
+        aside="Last 24 hours, UTC"
+      />
+      <Suspense fallback={<OverviewSkeleton />}>
+        <OverviewContent />
+      </Suspense>
+    </>
+  );
+}
+
+async function OverviewContent() {
+  const context = await getOrgContext();
+  if (!context) {
+    return (
+      <div className="px-5 py-8 sm:px-8">
+        <p className="text-sm text-ink-2">This account is not part of a workspace yet.</p>
+      </div>
+    );
+  }
+  const overview = await getOverview(context.organizationId);
+  if (!overview) return <Onboarding isOwner={context.role === 'owner'} />;
+  return <Dashboard overview={overview} />;
+}
+
+function crashFreeHealth(rate: number): { health: Health; label: string } {
+  if (rate >= 0.995) return { health: 'good', label: 'Healthy' };
+  if (rate >= 0.98) return { health: 'warning', label: 'Degraded' };
+  return { health: 'critical', label: 'Critical' };
+}
+
+function formatRate(rate: number): string {
+  // Keep precision where it matters: 99.95% must not round up to 100%.
+  const percent = Math.floor(rate * 10_000) / 100;
+  return `${percent.toFixed(percent === 100 ? 0 : 2)}%`;
+}
+
+function formatDuration(ms: number): string {
+  return ms >= 1000 ? `${(ms / 1000).toFixed(2)} s` : `${Math.round(ms)} ms`;
+}
+
+const relative = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
+function timeAgo(date: Date, now: number): string {
+  const seconds = Math.round((date.getTime() - now) / 1000);
+  const abs = Math.abs(seconds);
+  if (abs < 60) return relative.format(seconds, 'second');
+  if (abs < 3600) return relative.format(Math.round(seconds / 60), 'minute');
+  if (abs < 86_400) return relative.format(Math.round(seconds / 3600), 'hour');
+  return relative.format(Math.round(seconds / 86_400), 'day');
+}
+
+function Dashboard({ overview }: { overview: Overview }) {
+  const now = overview.now.getTime();
+  const rate = overview.crashFreeRate;
+  const status = rate === null ? null : crashFreeHealth(rate);
+  const launch = overview.coldLaunchP75;
+
+  return (
+    <div className="flex flex-col gap-4 px-5 py-6 sm:px-8">
+      {/* The one loud element: crash-free share beside the 24-hour error pulse. */}
+      <Panel className="grid grid-cols-1 gap-x-8 gap-y-4 p-5 lg:grid-cols-[17rem_minmax(0,1fr)]">
+        <div className="flex flex-col justify-between gap-4 lg:border-r lg:border-line lg:pr-8">
+          <div>
+            <h2 className="text-sm font-semibold text-ink">Crash-free sessions</h2>
+            <p className="mt-0.5 text-xs text-ink-3">Sessions that ended without a crash.</p>
+          </div>
+          <div>
+            <p className="font-wide text-hero font-semibold tracking-tight text-ink">
+              {rate === null ? 'No data' : formatRate(rate)}
+            </p>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              {status && <HealthBadge health={status.health} label={status.label} />}
+              <span className="text-xs text-ink-3">
+                {overview.sessions === 0
+                  ? 'No sessions started yet.'
+                  : `${integer.format(overview.crashedSessions)} of ${integer.format(overview.sessions)} sessions crashed`}
+              </span>
             </div>
-          }
-        >
-          <Welcome />
-        </Suspense>
-        <div className="rounded-xl border border-dashed border-zinc-300 p-6 text-center dark:border-zinc-700">
-          <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">Set up a project</p>
-          <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-            Create a project to get an ingest key for your app.
-          </p>
-          <Link
-            href="/settings"
-            className="mt-3 inline-block rounded-full bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
-          >
-            Open settings
-          </Link>
+          </div>
         </div>
-        <p className="text-xs text-zinc-500 dark:text-zinc-500">
-          Install the SDK in your Expo app, upload source maps with{' '}
-          <code className="rounded bg-zinc-100 px-1 py-0.5 font-mono dark:bg-zinc-800">mobs</code>,
-          and crashes, errors and performance metrics will show up here.
-        </p>
+        <div className="min-w-0">
+          <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
+            <h2 className="text-sm font-semibold text-ink">Error events per hour</h2>
+            <p className="text-xs text-ink-3">
+              {integer.format(overview.errors)} events, {integer.format(overview.crashes)} crashes
+            </p>
+          </div>
+          <PulseChart
+            points={overview.hours.map((bucket) => ({
+              hour: bucket.hour.toISOString(),
+              errors: bucket.errors,
+              crashes: bucket.crashes,
+            }))}
+          />
+        </div>
+      </Panel>
+
+      <Panel>
+        <dl className="grid grid-cols-2 divide-line sm:grid-cols-4 sm:divide-x">
+          <Stat
+            label="Error events"
+            value={compact.format(overview.errors)}
+            detail={`${integer.format(overview.crashes)} crashes`}
+          />
+          <Stat
+            label="Open issues"
+            value={compact.format(overview.openIssues)}
+            detail="Across all projects"
+          />
+          <Stat
+            label="Sessions"
+            value={compact.format(overview.sessions)}
+            detail="Started in this window"
+          />
+          <Stat
+            label="Cold launch, p75"
+            value={launch === null ? 'No data' : formatDuration(launch)}
+            detail={`Target ${formatDuration(COLD_LAUNCH_TARGET)}`}
+            badge={
+              launch === null ? undefined : launch <= COLD_LAUNCH_TARGET ? (
+                <HealthBadge health="good" label="On target" />
+              ) : (
+                <HealthBadge health="warning" label="Slow" />
+              )
+            }
+          />
+        </dl>
+      </Panel>
+
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]">
+        <Panel title="Open issues" description="Most recently seen first.">
+          {overview.topIssues.length === 0 ? (
+            <p className="px-5 pt-3 pb-5 text-sm text-ink-2">
+              No open issues. New errors from your apps are grouped here as they arrive.
+            </p>
+          ) : (
+            <div className="mt-3 overflow-x-auto">
+              <table className="w-full min-w-[34rem] text-left text-xs">
+                <thead className="border-y border-line text-ink-3">
+                  <tr>
+                    <th scope="col" className="w-[62%] px-5 py-2 font-medium">
+                      Issue
+                    </th>
+                    <th scope="col" className="px-3 py-2 font-medium">
+                      Project
+                    </th>
+                    <th scope="col" className="px-3 py-2 text-right font-medium">
+                      Events
+                    </th>
+                    <th scope="col" className="px-5 py-2 text-right font-medium">
+                      Last seen
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {overview.topIssues.map((issue) => (
+                    <tr
+                      key={issue.id}
+                      className="border-b border-line last:border-b-0 hover:bg-raised/40"
+                    >
+                      <td className="max-w-0 px-5 py-2.5">
+                        <div className="flex items-center gap-2">
+                          {issue.fatal && <HealthBadge health="critical" label="Crash" />}
+                          {issue.regressed && <HealthBadge health="warning" label="Regressed" />}
+                          <span className="truncate font-semibold text-ink">{issue.type}</span>
+                        </div>
+                        <p className="font-narrow mt-0.5 truncate text-ink-2" title={issue.message}>
+                          {issue.message}
+                        </p>
+                        {issue.culprit && (
+                          <p className="mt-0.5 truncate font-mono text-2xs text-ink-3">
+                            {issue.culprit}
+                          </p>
+                        )}
+                      </td>
+                      <td className="px-3 py-2.5 whitespace-nowrap text-ink-2">
+                        {issue.projectName}
+                      </td>
+                      <td className="px-3 py-2.5 text-right whitespace-nowrap text-ink tabular">
+                        {integer.format(issue.eventCount)}
+                      </td>
+                      <td className="px-5 py-2.5 text-right whitespace-nowrap text-ink-3 tabular">
+                        <time dateTime={issue.lastSeen.toISOString()}>
+                          {timeAgo(issue.lastSeen, now)}
+                        </time>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Panel>
+
+        <Panel title="Projects" description="Last 24 hours per project." className="xl:self-start">
+          <ul className="mt-3 border-t border-line">
+            {overview.projects.map((project) => {
+              const projectRate =
+                project.sessions > 0 ? 1 - project.crashedSessions / project.sessions : null;
+              const projectStatus = projectRate === null ? null : crashFreeHealth(projectRate);
+              return (
+                <li key={project.id} className="border-b border-line px-5 py-3 last:border-b-0">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="truncate font-semibold text-ink">{project.name}</span>
+                    {!project.sdkEnabled ? (
+                      <HealthBadge health="warning" label="SDK paused" />
+                    ) : projectStatus ? (
+                      <HealthBadge health={projectStatus.health} label={projectStatus.label} />
+                    ) : (
+                      <span className="text-2xs text-ink-3">Waiting for data</span>
+                    )}
+                  </div>
+                  <p className="mt-1 text-2xs text-ink-3 tabular">
+                    {integer.format(project.errors)} errors, {integer.format(project.sessions)}{' '}
+                    sessions, {integer.format(project.openIssues)} open issues
+                  </p>
+                </li>
+              );
+            })}
+          </ul>
+        </Panel>
       </div>
     </div>
   );
 }
 
-async function Welcome() {
-  const user = await getCurrentUser();
+function Stat({
+  label,
+  value,
+  detail,
+  badge,
+}: {
+  label: string;
+  value: string;
+  detail: string;
+  badge?: ReactNode;
+}) {
   return (
-    <div>
-      <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
-        Welcome, {user.name}
-      </h1>
-      <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-        {user.email}
-        {!user.emailVerified && ' (unverified)'}
-      </p>
+    <div className="flex flex-col gap-1 border-line px-5 py-4 max-sm:border-b max-sm:odd:border-r max-sm:[&:nth-last-child(-n+2)]:border-b-0">
+      <dt className="text-xs text-ink-3">{label}</dt>
+      <dd className="font-wide text-xl font-semibold tracking-tight text-ink">{value}</dd>
+      <dd className="flex flex-wrap items-center gap-2 text-2xs text-ink-3">
+        {badge}
+        {detail}
+      </dd>
+    </div>
+  );
+}
+
+function Onboarding({ isOwner }: { isOwner: boolean }) {
+  if (!isOwner) {
+    return (
+      <div className="px-5 py-8 sm:px-8">
+        <Panel title="No projects yet" className="max-w-2xl">
+          <p className="px-5 pt-2 pb-5 text-sm text-ink-2">
+            The workspace owner creates projects. Once an app sends data, its health shows up here.
+          </p>
+        </Panel>
+      </div>
+    );
+  }
+
+  return (
+    <div className="px-5 py-6 sm:px-8">
+      <Panel
+        title="Connect your first app"
+        description="Three steps, then crashes, errors and launch times appear on this page."
+        className="max-w-3xl"
+      >
+        <ol className="mt-4 border-t border-line">
+          <Step number={1} title="Create a project">
+            <p>
+              Each app gets its own project, with a public ingest key and a secret upload token.
+            </p>
+            <Link href="/settings#projects" className={`${primaryButtonClass} mt-3`}>
+              Create a project
+            </Link>
+          </Step>
+          <Step number={2} title="Install the SDK">
+            <p>
+              Add the SDK to your Expo or React Native app, then configure it with the ingest key.
+            </p>
+            <pre className="mt-3 overflow-x-auto rounded-md border border-line bg-night px-3 py-2 font-mono text-2xs text-ink-2">
+              npx expo install @mobile-observability/react-native
+            </pre>
+          </Step>
+          <Step number={3} title="Upload source maps in CI">
+            <p>Readable stack traces need source maps. Run the CLI after each build or update.</p>
+            <pre className="mt-3 overflow-x-auto rounded-md border border-line bg-night px-3 py-2 font-mono text-2xs text-ink-2">
+              npx mobs sourcemaps upload-eas --dist dist --eas-json update.json
+            </pre>
+          </Step>
+        </ol>
+      </Panel>
+    </div>
+  );
+}
+
+function Step({ number, title, children }: { number: number; title: string; children: ReactNode }) {
+  return (
+    <li className="grid grid-cols-[2rem_minmax(0,1fr)] gap-3 border-b border-line px-5 py-4 last:border-b-0">
+      <span
+        aria-hidden="true"
+        className="flex size-7 items-center justify-center rounded-full border border-line-strong text-xs font-semibold text-ink-2 tabular"
+      >
+        {number}
+      </span>
+      <div className="text-xs text-ink-2">
+        <h3 className="mb-1 text-sm font-semibold text-ink">{title}</h3>
+        {children}
+      </div>
+    </li>
+  );
+}
+
+function OverviewSkeleton() {
+  return (
+    <div aria-hidden="true" className="flex flex-col gap-4 px-5 py-6 sm:px-8">
+      <div className="h-[15.5rem] motion-safe:animate-pulse rounded-[10px] border border-line bg-panel" />
+      <div className="h-[6.5rem] motion-safe:animate-pulse rounded-[10px] border border-line bg-panel" />
+      <div className="h-64 motion-safe:animate-pulse rounded-[10px] border border-line bg-panel" />
     </div>
   );
 }

@@ -9,6 +9,7 @@
 import { and, eq } from 'drizzle-orm';
 import { getDb } from '../src/db/client';
 import { apiKeys, member, organization, projects, user } from '../src/db/schema';
+import { isWorkspaceUnclaimed } from '../src/lib/auth/access-policy';
 import { auth } from '../src/lib/auth/server';
 import { generateKey } from '../src/server/keys/keys';
 
@@ -22,6 +23,12 @@ async function main() {
 
   let [owner] = await db.select().from(user).where(eq(user.email, EMAIL));
   if (!owner) {
+    // The workspace is invite-only: the demo owner can only be the first account.
+    if (!(await isWorkspaceUnclaimed())) {
+      throw new Error(
+        `This database already has accounts. Invite ${EMAIL} from Settings, or run dev:project on an empty database.`,
+      );
+    }
     await auth.api.signUpEmail({ body: { email: EMAIL, password: PASSWORD, name: 'Demo Owner' } });
     [owner] = await db.select().from(user).where(eq(user.email, EMAIL));
   }

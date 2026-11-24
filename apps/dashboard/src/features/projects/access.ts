@@ -2,12 +2,13 @@ import 'server-only';
 
 import { asc, desc, eq, sql } from 'drizzle-orm';
 import { getDb } from '@/db/client';
-import { member } from '@/db/schema';
+import { member, organization } from '@/db/schema';
 import { getCurrentUser } from '@/lib/auth/session';
 
 export interface OrgContext {
   userId: string;
   organizationId: string;
+  organizationName: string;
   role: string;
 }
 
@@ -20,8 +21,13 @@ export async function getOrgContext(): Promise<OrgContext | null> {
   const user = await getCurrentUser();
   const active = user.activeOrganizationId;
   const [membership] = await getDb()
-    .select({ organizationId: member.organizationId, role: member.role })
+    .select({
+      organizationId: member.organizationId,
+      organizationName: organization.name,
+      role: member.role,
+    })
     .from(member)
+    .innerJoin(organization, eq(organization.id, member.organizationId))
     .where(eq(member.userId, user.id))
     .orderBy(
       active ? desc(sql`${member.organizationId} = ${active}`) : asc(member.createdAt),

@@ -85,7 +85,7 @@ pnpm --filter @mobile-observability/dashboard db:migrate
 pnpm dev                                 # dashboard on http://localhost:3000
 ```
 
-Sign up at `/signup` (your account becomes the owner of the organization it creates), create a project, and copy the ingest key from Settings.
+Open `/signup` to set up the workspace: the first account owns it, and everyone else joins through invite links the owner creates in Settings → People. Then create a project and copy the ingest key from Settings.
 
 ## Self-hosting
 

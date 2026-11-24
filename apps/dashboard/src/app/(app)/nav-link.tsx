@@ -2,39 +2,47 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import type { ReactNode } from 'react';
 
 interface NavLinkProps {
   href: string;
   label: string;
+  icon: ReactNode;
   soon?: boolean;
+  /** Compact horizontal variant for the small-screen header. */
+  compact?: boolean;
 }
 
-export function NavLink({ href, label, soon }: NavLinkProps) {
+export function NavLink({ href, label, icon, soon, compact }: NavLinkProps) {
   const pathname = usePathname();
+  const current = href === '/' ? pathname === '/' : pathname.startsWith(href);
+
+  const base = compact
+    ? 'flex shrink-0 items-center gap-2 rounded-md px-2.5 py-1.5 text-xs'
+    : 'relative flex items-center gap-2.5 rounded-md px-2.5 py-[7px] text-sm';
 
   if (soon) {
     return (
-      <span className="flex items-center justify-between rounded-lg px-2 py-1.5 text-sm text-zinc-600 dark:text-zinc-400">
-        {label}
-        <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-medium text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
-          soon
-        </span>
+      <span className={`${base} cursor-default text-ink-3`} title={`${label} is not available yet`}>
+        <span className="opacity-60">{icon}</span>
+        <span className="flex-1">{label}</span>
+        {!compact && <span className="text-2xs text-ink-3/80">Soon</span>}
       </span>
     );
   }
 
-  const current = pathname === href;
   return (
     <Link
       href={href}
       aria-current={current ? 'page' : undefined}
       className={
         current
-          ? 'rounded-lg bg-zinc-100 px-2 py-1.5 text-sm font-medium text-zinc-900 dark:bg-zinc-800 dark:text-zinc-50'
-          : 'rounded-lg px-2 py-1.5 text-sm text-zinc-600 hover:bg-zinc-50 dark:text-zinc-400 dark:hover:bg-zinc-900'
+          ? `${base} bg-raised font-medium text-ink ${compact ? '' : 'before:absolute before:inset-y-1.5 before:-left-3 before:w-0.5 before:rounded-full before:bg-ink'}`
+          : `${base} text-ink-2 hover:bg-raised/60 hover:text-ink`
       }
     >
-      {label}
+      <span className={current ? 'text-ink' : 'text-ink-3'}>{icon}</span>
+      <span className="flex-1">{label}</span>
     </Link>
   );
 }
