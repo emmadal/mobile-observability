@@ -22,7 +22,6 @@ import {
   isStartupMetric,
   METRIC_LABELS,
   type MetricStats,
-  type NetworkView,
   type RecentRequest,
   type StatusCodeClass,
 } from '@/features/performance/service';
