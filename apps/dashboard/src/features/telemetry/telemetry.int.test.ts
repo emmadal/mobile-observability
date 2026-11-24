@@ -710,6 +710,8 @@ describe('performance', () => {
     expect(network.totalRequests).toBe(4);
     expect(network.errorCount).toBe(2);
     expect(network.errorRate).toBeCloseTo(0.5);
+    expect(network.p50Ms).toBe(250);
+    expect(network.statuses).toEqual({ '2xx': 2, '4xx': 1, '5xx': 1 });
     expect(network.rows.map((row) => `${row.method} ${row.path}`)).toEqual([
       'GET /feed',
       'GET /cart',
@@ -721,6 +723,15 @@ describe('performance', () => {
       p90Ms: 280,
       p95Ms: 290,
     });
+    // Recent requests are the latest individual calls, newest first.
+    expect(network.recent).toHaveLength(4);
+    expect(network.recent[0]).toMatchObject({ path: '/feed', statusCode: 200, durationMs: 500 });
+    expect(network.recent.map((row) => row.timestamp.getTime())).toEqual([
+      ago(15).getTime(),
+      ago(20).getTime(),
+      ago(25).getTime(),
+      ago(30).getTime(),
+    ]);
   });
 });
 

@@ -10,7 +10,7 @@ import {
 } from '@mobile-observability/protocol';
 import { and, desc, eq, gte, inArray, isNotNull, lt, type SQL, sql } from 'drizzle-orm';
 import { getDb } from '@/db/client';
-import { metrics, requests } from '@/db/schema';
+import { metrics, projects, requests, sessions } from '@/db/schema';
 import {
   bucketStarts,
   type OverviewFilters,
@@ -74,12 +74,46 @@ export interface NetworkRow {
   p95Ms: number | null;
 }
 
+/** One individual HTTP request, newest first. */
+export interface RecentRequest {
+  id: number;
+  timestamp: Date;
+  method: string;
+  host: string;
+  path: string;
+  statusCode: number;
+  durationMs: number;
+  /** Transport-level failure, e.g. a timeout; null when the server answered. */
+  error: string | null;
+  projectName: string;
+  appVersion: string;
+  platform: 'ios' | 'android';
+  sessionId: string | null;
+  /** Database id of the session, when the session row exists. */
+  sessionRowId: number | null;
+}
+
+export type StatusCodeClass = '2xx' | '3xx' | '4xx' | '5xx';
+
+export function statusCodeClass(code: number): StatusCodeClass | null {
+  if (code >= 200 && code < 300) return '2xx';
+  if (code >= 300 && code < 400) return '3xx';
+  if (code >= 400 && code < 500) return '4xx';
+  if (code >= 500 && code < 600) return '5xx';
+  return null;
+}
+
 export interface NetworkView {
   rows: NetworkRow[];
   totalRequests: number;
   errorCount: number;
   errorRate: number;
   p95Ms: number | null;
+  p50Ms: number | null;
+  /** Requests per status class; keys missing when zero. */
+  statuses: Partial<Record<StatusCodeClass, number>>;
+  /** Latest individual requests, newest first. */
+  recent: RecentRequest[];
 }
 
 export const HISTOGRAM_BUCKETS = 10;
@@ -314,6 +348,9 @@ export async function getNetwork(
     errorCount: 0,
     errorRate: 0,
     p95Ms: null,
+    p50Ms: null,
+    statuses: {},
+    recent: [],
   };
   if (projectIds.length === 0) return empty;
 
@@ -331,7 +368,7 @@ export async function getNetwork(
     sql<number | null>`percentile_cont(${fraction}) within group (order by ${requests.durationMs})`;
   const isError = sql`(${requests.statusCode} >= 400 or ${requests.error} is not null)`;
 
-  const [rows, totals, overall] = await Promise.all([
+  const [rows, totals, overall, statusRows, recentRows] = await Promise.all([
     getDb()
       .select({
         method: requests.method,
@@ -356,13 +393,51 @@ export async function getNetwork(
       .from(requests)
       .where(scope),
     getDb()
-      .select({ p95: durationPercentile(0.95) })
+      .select({
+        p95: durationPercentile(0.95),
+        p50: durationPercentile(0.5),
+      })
       .from(requests)
       .where(scope),
+    getDb()
+      .select({ statusCode: requests.statusCode, total: sql<number>`count(*)::int` })
+      .from(requests)
+      .where(scope)
+      .groupBy(requests.statusCode),
+    getDb()
+      .select({
+        id: requests.id,
+        timestamp: requests.timestamp,
+        method: requests.method,
+        host: requests.host,
+        path: requests.path,
+        statusCode: requests.statusCode,
+        durationMs: requests.durationMs,
+        error: requests.error,
+        projectName: projects.name,
+        appVersion: requests.appVersion,
+        platform: requests.platform,
+        sessionId: requests.sessionId,
+        sessionRowId: sessions.id,
+      })
+      .from(requests)
+      .innerJoin(projects, eq(projects.id, requests.projectId))
+      .leftJoin(
+        sessions,
+        and(eq(sessions.projectId, requests.projectId), eq(sessions.sessionId, requests.sessionId)),
+      )
+      .where(scope)
+      .orderBy(desc(requests.timestamp), desc(requests.id))
+      .limit(20),
   ]);
 
   const totalRequests = Number(totals[0]?.total ?? 0);
   const errorCount = Number(totals[0]?.errors ?? 0);
+  const statuses: Partial<Record<StatusCodeClass, number>> = {};
+  for (const row of statusRows) {
+    const key = statusCodeClass(Number(row.statusCode));
+    if (key) statuses[key] = (statuses[key] ?? 0) + Number(row.total);
+  }
   return {
     rows: rows.map((row) => ({
       method: row.method,
@@ -379,5 +454,8 @@ export async function getNetwork(
     errorCount,
     errorRate: totalRequests > 0 ? errorCount / totalRequests : 0,
     p95Ms: toNumber(overall[0]?.p95),
+    p50Ms: toNumber(overall[0]?.p50),
+    statuses,
+    recent: recentRows.map((row) => ({ ...row, timestamp: new Date(row.timestamp) })),
   };
 }

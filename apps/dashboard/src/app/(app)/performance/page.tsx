@@ -21,9 +21,11 @@ import {
   METRIC_LABELS,
   type MetricStats,
   type NetworkView,
+  type RecentRequest,
+  type StatusCodeClass,
 } from '@/features/performance/service';
 import { getOrgContext } from '@/features/projects/access';
-import { formatCount, formatPercent } from '@/features/telemetry/format';
+import { formatCount, formatDateTime, formatPercent, timeAgo } from '@/features/telemetry/format';
 
 export const metadata = { title: 'Performance' };
 
@@ -148,7 +150,9 @@ async function PerformanceContent({
           <StartupTab options={options} filters={filters} window={window} metric={metric} />
         )}
         {tab === 'screens' && <ScreensTab options={options} filters={filters} window={window} />}
-        {tab === 'network' && <NetworkTab options={options} filters={filters} window={window} />}
+        {tab === 'network' && (
+          <NetworkTab options={options} filters={filters} window={window} now={now.getTime()} />
+        )}
       </div>
     </OverviewFrame>
   );
@@ -395,16 +399,18 @@ async function NetworkTab({
   options,
   filters,
   window,
+  now,
 }: {
   options: Awaited<ReturnType<typeof getFilterOptions>>;
   filters: ReturnType<typeof parseOverviewFilters>;
   window: ReturnType<typeof resolveWindow>;
+  now: number;
 }) {
   const network = await getNetwork(options, filters, window);
   return (
     <>
       <Panel>
-        <dl className="grid grid-cols-2 divide-line sm:grid-cols-4 sm:divide-x">
+        <dl className="grid grid-cols-2 divide-line sm:grid-cols-3 sm:divide-x lg:grid-cols-5">
           <NetworkStat
             label="Requests"
             value={formatCount(network.totalRequests)}
@@ -421,12 +427,23 @@ async function NetworkTab({
             detail="Share of requests"
           />
           <NetworkStat
+            label="P50 duration"
+            value={network.p50Ms === null ? 'No data' : formatDuration(network.p50Ms)}
+            detail="Median response time"
+          />
+          <NetworkStat
             label="P95 duration"
             value={network.p95Ms === null ? 'No data' : formatDuration(network.p95Ms)}
             detail="Across all requests"
           />
         </dl>
       </Panel>
+
+      {network.totalRequests > 0 && (
+        <Panel title="Status codes" description="Response classes across all captured requests.">
+          <StatusBars statuses={network.statuses} total={network.totalRequests} />
+        </Panel>
+      )}
 
       <Panel
         title="Endpoints"
@@ -444,7 +461,145 @@ async function NetworkTab({
           Query strings and headers are never stored.
         </p>
       </Panel>
+
+      <RecentRequests requests={network.recent} now={now} />
     </>
+  );
+}
+
+const STATUS_CLASSES: { key: StatusCodeClass; label: string; bar: string }[] = [
+  { key: '2xx', label: '2xx Success', bar: 'bg-good' },
+  { key: '3xx', label: '3xx Redirect', bar: 'bg-series' },
+  { key: '4xx', label: '4xx Client error', bar: 'bg-warning' },
+  { key: '5xx', label: '5xx Server error', bar: 'bg-critical' },
+];
+
+function StatusBars({
+  statuses,
+  total,
+}: {
+  statuses: Partial<Record<StatusCodeClass, number>>;
+  total: number;
+}) {
+  return (
+    <div className="mt-3 px-5 pb-4">
+      <div className="flex h-2.5 overflow-hidden rounded-full bg-raised ring-1 ring-line ring-inset">
+        {STATUS_CLASSES.map(({ key, bar }) => {
+          const count = statuses[key] ?? 0;
+          if (count === 0) return null;
+          return (
+            <div
+              key={key}
+              className={bar}
+              style={{ width: `${(count / total) * 100}%` }}
+              title={`${key}: ${formatCount(count)}`}
+            />
+          );
+        })}
+      </div>
+      <ul className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1 text-2xs text-ink-3">
+        {STATUS_CLASSES.map(({ key, label }) => (
+          <li key={key} className="flex items-center gap-1.5">
+            <span
+              className={`size-2 rounded-sm ${STATUS_CLASSES.find((c) => c.key === key)?.bar}`}
+            />
+            <span>{label}</span>
+            <span className="text-ink-2 tabular">{formatCount(statuses[key] ?? 0)}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function RecentRequests({ requests, now }: { requests: RecentRequest[]; now: number }) {
+  return (
+    <Panel
+      title="Recent requests"
+      description="The 20 latest captured HTTP requests, newest first."
+    >
+      {requests.length === 0 ? (
+        <p className="px-5 pt-3 pb-5 text-sm text-ink-2">No requests captured in this range.</p>
+      ) : (
+        <div className="mt-3 overflow-x-auto">
+          <table className="w-full min-w-[52rem] text-left text-xs">
+            <thead className="border-y border-line text-ink-3">
+              <tr>
+                <th scope="col" className="w-[40%] px-5 py-2 font-medium">
+                  Request
+                </th>
+                <th scope="col" className="px-3 py-2 font-medium">
+                  Project
+                </th>
+                <th scope="col" className="px-3 py-2 text-right font-medium">
+                  Status
+                </th>
+                <th scope="col" className="px-3 py-2 text-right font-medium">
+                  Duration
+                </th>
+                <th scope="col" className="px-5 py-2 text-right font-medium">
+                  When
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {requests.map((request) => (
+                <tr key={request.id} className="border-b border-line last:border-b-0">
+                  <td className="max-w-0 px-5 py-2.5">
+                    <p
+                      className="truncate font-mono text-2xs"
+                      title={`${request.method} ${request.host}${request.path}`}
+                    >
+                      <span className="font-semibold text-ink">{request.method}</span>{' '}
+                      <span className="text-ink-2">
+                        {request.host}
+                        {request.path}
+                      </span>
+                    </p>
+                    {request.error && (
+                      <p className="truncate text-2xs text-critical" title={request.error}>
+                        {request.error}
+                      </p>
+                    )}
+                  </td>
+                  <td className="px-3 py-2.5 whitespace-nowrap text-ink-2">
+                    {request.projectName}
+                  </td>
+                  <td className="px-3 py-2.5 text-right whitespace-nowrap tabular">
+                    {request.error ? (
+                      <span className="text-2xs text-critical">failed</span>
+                    ) : (
+                      <span
+                        className={
+                          request.statusCode >= 500
+                            ? 'text-critical'
+                            : request.statusCode >= 400
+                              ? 'text-warning'
+                              : 'text-ink-2'
+                        }
+                      >
+                        {request.statusCode}
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2.5 text-right whitespace-nowrap text-ink tabular">
+                    {formatDuration(request.durationMs)}
+                  </td>
+                  <td className="px-5 py-2.5 text-right whitespace-nowrap text-ink-3 tabular">
+                    <time
+                      dateTime={request.timestamp.toISOString()}
+                      title={formatDateTime(request.timestamp)}
+                    >
+                      {timeAgo(request.timestamp, now)}
+                    </time>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Panel>
   );
 }
 
