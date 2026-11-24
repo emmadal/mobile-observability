@@ -11,7 +11,13 @@ import {
   type SessionDetailView,
   type SessionError,
 } from '@/features/sessions/service';
-import { formatCount, formatDateTime, formatElapsed, shortId } from '@/features/telemetry/format';
+import {
+  formatCount,
+  formatDateTime,
+  formatElapsed,
+  platformLabel,
+  shortId,
+} from '@/features/telemetry/format';
 
 export const metadata = { title: 'Session' };
 
@@ -79,7 +85,7 @@ async function SessionContent({ params }: Pick<PageProps<'/sessions/[id]'>, 'par
               {session.appVersion} ({session.appBuild})
             </span>
             <span aria-hidden="true">·</span>
-            <span className="capitalize">{session.platform}</span>
+            <span>{platformLabel(session.platform)}</span>
             {session.updateId && (
               <>
                 <span aria-hidden="true">·</span>

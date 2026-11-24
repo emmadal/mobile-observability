@@ -11,6 +11,7 @@ import {
   formatCompact,
   formatCount,
   formatPercent,
+  platformLabel,
   shortId,
   timeAgo,
 } from '@/features/telemetry/format';
@@ -201,7 +202,7 @@ function ReleaseTable({ view, now }: { view: ReleasesView; now: number }) {
                   users
                 </p>
               </td>
-              <td className="px-3 py-3 capitalize text-ink-2">{release.platform}</td>
+              <td className="px-3 py-3 text-ink-2">{platformLabel(release.platform)}</td>
               <td className="px-3 py-3 text-ink-2">{release.environment}</td>
               <td className="px-3 py-3 text-right text-ink-2 tabular">
                 {formatPercent(release.adoptionRate)}

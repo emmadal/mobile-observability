@@ -26,7 +26,13 @@ import { OverviewFrame } from '@/features/overview/overview-frame';
 import { getFilterOptions } from '@/features/overview/service';
 import { OverviewToolbar } from '@/features/overview/toolbar';
 import { getOrgContext } from '@/features/projects/access';
-import { formatCount, formatDateTime, shortId, timeAgo } from '@/features/telemetry/format';
+import {
+  formatCount,
+  formatDateTime,
+  platformLabel,
+  shortId,
+  timeAgo,
+} from '@/features/telemetry/format';
 
 export const metadata = { title: 'Event' };
 
@@ -333,7 +339,7 @@ function OccurrenceRow({ occurrence, now }: { occurrence: EventOccurrence; now: 
           </>
         )}
         <span aria-hidden="true">·</span>
-        <span className="capitalize">{occurrence.platform}</span>
+        <span>{platformLabel(occurrence.platform)}</span>
         <span aria-hidden="true">·</span>
         <span>{occurrence.environment}</span>
         <span aria-hidden="true">·</span>

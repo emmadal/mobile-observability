@@ -60,3 +60,10 @@ export function formatElapsed(from: Date, to: Date): string {
 export function shortId(id: string): string {
   return id.length > 8 ? id.slice(0, 8) : id;
 }
+
+/** "iOS" / "Android": CSS capitalize would render "Ios". */
+export function platformLabel(platform: string): string {
+  if (platform === 'ios') return 'iOS';
+  if (platform === 'android') return 'Android';
+  return platform;
+}

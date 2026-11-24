@@ -619,11 +619,11 @@ function DeviceTable({ devices, now }: { devices: DeviceRow[]; now: number }) {
   );
 }
 
-const STATUS_CLASSES: { key: StatusCodeClass; label: string; bar: string }[] = [
-  { key: '2xx', label: '2xx Success', bar: 'bg-good' },
-  { key: '3xx', label: '3xx Redirect', bar: 'bg-series' },
-  { key: '4xx', label: '4xx Client error', bar: 'bg-warning' },
-  { key: '5xx', label: '5xx Server error', bar: 'bg-critical' },
+const STATUS_CLASSES: { key: StatusCodeClass; label: string; bar: string; fill: string }[] = [
+  { key: '2xx', label: '2xx Success', bar: 'bg-good', fill: 'fill-good' },
+  { key: '3xx', label: '3xx Redirect', bar: 'bg-series', fill: 'fill-series' },
+  { key: '4xx', label: '4xx Client error', bar: 'bg-warning', fill: 'fill-warning' },
+  { key: '5xx', label: '5xx Server error', bar: 'bg-critical', fill: 'fill-critical' },
 ];
 
 function StatusBars({
@@ -633,21 +633,32 @@ function StatusBars({
   statuses: Partial<Record<StatusCodeClass, number>>;
   total: number;
 }) {
+  // Segment geometry lives in SVG attributes: the CSP blocks inline style attributes.
+  let offset = 0;
+  const segments = STATUS_CLASSES.flatMap(({ key, fill }) => {
+    const count = statuses[key] ?? 0;
+    if (count === 0 || total <= 0) return [];
+    const width = (count / total) * 100;
+    const segment = { key, fill, count, x: offset, width };
+    offset += width;
+    return [segment];
+  });
   return (
     <div className="mt-3 px-5 pb-4">
-      <div className="flex h-2.5 overflow-hidden rounded-full bg-raised ring-1 ring-line ring-inset">
-        {STATUS_CLASSES.map(({ key, bar }) => {
-          const count = statuses[key] ?? 0;
-          if (count === 0) return null;
-          return (
-            <div
-              key={key}
-              className={bar}
-              style={{ width: `${(count / total) * 100}%` }}
-              title={`${key}: ${formatCount(count)}`}
-            />
-          );
-        })}
+      <div className="h-2.5 overflow-hidden rounded-full bg-raised ring-1 ring-line ring-inset">
+        <svg
+          viewBox="0 0 100 1"
+          preserveAspectRatio="none"
+          className="block size-full"
+          role="img"
+          aria-label="Share of requests by status class"
+        >
+          {segments.map(({ key, fill, count, x, width }) => (
+            <rect key={key} x={x} y={0} width={width} height={1} className={fill}>
+              <title>{`${key}: ${formatCount(count)}`}</title>
+            </rect>
+          ))}
+        </svg>
       </div>
       <ul className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1 text-2xs text-ink-3">
         {STATUS_CLASSES.map(({ key, label }) => (

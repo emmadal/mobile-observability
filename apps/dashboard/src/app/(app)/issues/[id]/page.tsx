@@ -11,6 +11,7 @@ import {
   formatCount,
   formatDateTime,
   formatElapsed,
+  platformLabel,
   shortId,
   timeAgo,
 } from '@/features/telemetry/format';
@@ -293,8 +294,8 @@ function OccurrencesPanel({ detail }: { detail: IssueDetailView }) {
                       <span className="ml-1 text-2xs text-ink-3">· {shortId(event.updateId)}</span>
                     )}
                   </td>
-                  <td className="px-3 py-2.5 whitespace-nowrap text-ink-2 capitalize">
-                    {event.platform}
+                  <td className="px-3 py-2.5 whitespace-nowrap text-ink-2">
+                    {platformLabel(event.platform)}
                   </td>
                   <td className="px-3 py-2.5 whitespace-nowrap text-ink-2">{event.environment}</td>
                   <td className="px-5 py-2.5 whitespace-nowrap">
