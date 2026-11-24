@@ -80,6 +80,43 @@ describe('auth flow (T7)', () => {
     expect(members[0]?.userId).toBe(user.id);
   });
 
+  it('changes the password and signs out other sessions', async () => {
+    const first = sessionHeaders(await signUp({}));
+    const second = sessionHeaders(
+      (await auth.api.signInEmail({
+        body: { email: credentials.email, password: credentials.password },
+        asResponse: true,
+      })) as unknown as Response,
+    );
+
+    await expect(
+      auth.api.changePassword({
+        body: { currentPassword: 'not the password', newPassword: 'a brand new password' },
+        headers: first,
+      }),
+    ).rejects.toMatchObject({ statusCode: 400 });
+
+    await auth.api.changePassword({
+      body: {
+        currentPassword: credentials.password,
+        newPassword: 'a brand new password',
+        revokeOtherSessions: true,
+      },
+      headers: first,
+    });
+
+    await expect(
+      auth.api.signInEmail({ body: { email: credentials.email, password: credentials.password } }),
+    ).rejects.toMatchObject({ statusCode: 401 });
+    const signIn = await auth.api.signInEmail({
+      body: { email: credentials.email, password: 'a brand new password' },
+    });
+    expect(signIn.user.email).toBe(credentials.email);
+    expect(
+      await auth.api.getSession({ headers: second, query: { disableCookieCache: true } }),
+    ).toBeNull();
+  });
+
   it('rejects a duplicate organization slug', async () => {
     const owner = await signUp({});
     await auth.api.createOrganization({

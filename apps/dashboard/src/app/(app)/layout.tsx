@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { Suspense } from 'react';
 import {
+  AccountIcon,
   IssuesIcon,
   MarkIcon,
   OverviewIcon,
@@ -20,7 +21,10 @@ const monitor = [
   { href: '/releases', label: 'Releases', icon: <ReleasesIcon />, soon: true },
 ];
 
-const manage = [{ href: '/settings', label: 'Settings', icon: <SettingsIcon /> }];
+const manage = [
+  { href: '/settings', label: 'Settings', icon: <SettingsIcon /> },
+  { href: '/account', label: 'Account', icon: <AccountIcon /> },
+];
 
 function Brand() {
   return (

@@ -105,6 +105,15 @@ export function SettingsIcon(props: IconProps) {
   );
 }
 
+export function AccountIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <circle cx="8" cy="5.5" r="2.75" />
+      <path d="M2.75 14a5.25 5.25 0 0 1 10.5 0" />
+    </Icon>
+  );
+}
+
 export function SignOutIcon(props: IconProps) {
   return (
     <Icon {...props}>

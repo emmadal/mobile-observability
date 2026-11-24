@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { signOut } from '@/app/actions/auth';
 import { SignOutIcon } from '@/components/icons';
 import { getOrgContext } from '@/features/projects/access';
@@ -20,12 +21,12 @@ export async function UserMenu() {
       >
         {user.name.slice(0, 1).toUpperCase()}
       </span>
-      <div className="min-w-0 flex-1">
+      <Link href="/account" className="min-w-0 flex-1 rounded-md hover:text-ink">
         <p className="truncate text-xs font-medium text-ink">{user.name}</p>
         <p className="truncate text-2xs text-ink-3" title={user.email}>
           {role}, {user.email}
         </p>
-      </div>
+      </Link>
       <form action={signOut}>
         <button
           type="submit"
