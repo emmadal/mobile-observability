@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import { Archivo } from 'next/font/google';
 import { connection } from 'next/server';
+import { Providers } from '@/components/providers';
 import './globals.css';
 
 // One family; its width axis separates placards (wide) from dense tables (narrow).
@@ -28,8 +29,10 @@ export default async function RootLayout({ children }: LayoutProps<'/'>) {
   // src/proxy.ts) on its scripts; a build-time page could not carry it.
   await connection();
   return (
-    <html lang="en" className={`${archivo.variable} h-full`}>
-      <body className="flex min-h-full flex-col">{children}</body>
+    <html lang="en" className={`${archivo.variable} dark h-full`}>
+      <body className="flex min-h-full flex-col">
+        <Providers>{children}</Providers>
+      </body>
     </html>
   );
 }

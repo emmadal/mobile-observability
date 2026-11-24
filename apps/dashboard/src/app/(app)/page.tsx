@@ -2,8 +2,17 @@ import { METRIC_TARGETS_MS } from '@mobile-observability/protocol';
 import Link from 'next/link';
 import { type ReactNode, Suspense } from 'react';
 import { type Health, HealthBadge, PageHeader, Panel, primaryButtonClass } from '@/components/ui';
-import { PulseChart } from '@/features/overview/pulse-chart';
-import { COLD_LAUNCH_METRIC, getOverview, type Overview } from '@/features/overview/service';
+import { ErrorsChart, LaunchChart, SessionsChart } from '@/features/overview/charts';
+import { parseOverviewFilters, rangeLabel, resolveWindow } from '@/features/overview/filters';
+import { formatDuration, plural } from '@/features/overview/format';
+import { OverviewFrame } from '@/features/overview/overview-frame';
+import {
+  COLD_LAUNCH_METRIC,
+  getFilterOptions,
+  getOverview,
+  type Overview,
+} from '@/features/overview/service';
+import { OverviewToolbar } from '@/features/overview/toolbar';
 import { getOrgContext } from '@/features/projects/access';
 
 export const metadata = { title: 'Overview' };
@@ -13,25 +22,27 @@ const compact = new Intl.NumberFormat('en', { notation: 'compact', maximumFracti
 const COLD_LAUNCH_TARGET = METRIC_TARGETS_MS[COLD_LAUNCH_METRIC];
 
 /**
- * Overview: app health across every project of the workspace for the last 24
- * hours. All reads are request-time (session, then database), inside Suspense.
+ * Overview: app health across the workspace for a time range and filters
+ * carried in the URL (see features/overview/filters.ts). All reads are
+ * request-time (session, then database), inside Suspense; auto-refresh
+ * re-runs this render on an interval.
  */
-export default function OverviewPage() {
+export default function OverviewPage({ searchParams }: PageProps<'/'>) {
   return (
     <>
       <PageHeader
         title="Overview"
         description="App health across every project in this workspace."
-        aside="Last 24 hours, UTC"
+        aside="Times in UTC"
       />
       <Suspense fallback={<OverviewSkeleton />}>
-        <OverviewContent />
+        <OverviewContent searchParams={searchParams} />
       </Suspense>
     </>
   );
 }
 
-async function OverviewContent() {
+async function OverviewContent({ searchParams }: Pick<PageProps<'/'>, 'searchParams'>) {
   const context = await getOrgContext();
   if (!context) {
     return (
@@ -40,9 +51,27 @@ async function OverviewContent() {
       </div>
     );
   }
-  const overview = await getOverview(context.organizationId);
-  if (!overview) return <Onboarding isOwner={context.role === 'owner'} />;
-  return <Dashboard overview={overview} />;
+
+  const now = new Date();
+  const parsed = parseOverviewFilters(await searchParams, now);
+  const options = await getFilterOptions(context.organizationId);
+  if (options.projects.length === 0) return <Onboarding isOwner={context.role === 'owner'} />;
+
+  // A project id from another workspace (or a deleted one) falls back to all.
+  const filters = options.projects.some((project) => project.id === parsed.project)
+    ? parsed
+    : { ...parsed, project: null };
+  const timeWindow = resolveWindow(filters.range, now);
+  const overview = await getOverview(options, filters, timeWindow);
+
+  return (
+    <OverviewFrame
+      filters={filters}
+      toolbar={<OverviewToolbar options={options} asOf={now.toISOString()} />}
+    >
+      <Dashboard overview={overview} rangeName={rangeLabel(filters.range)} />
+    </OverviewFrame>
+  );
 }
 
 function crashFreeHealth(rate: number): { health: Health; label: string } {
@@ -57,10 +86,6 @@ function formatRate(rate: number): string {
   return `${percent.toFixed(percent === 100 ? 0 : 2)}%`;
 }
 
-function formatDuration(ms: number): string {
-  return ms >= 1000 ? `${(ms / 1000).toFixed(2)} s` : `${Math.round(ms)} ms`;
-}
-
 const relative = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
 function timeAgo(date: Date, now: number): string {
   const seconds = Math.round((date.getTime() - now) / 1000);
@@ -71,20 +96,24 @@ function timeAgo(date: Date, now: number): string {
   return relative.format(Math.round(seconds / 86_400), 'day');
 }
 
-function Dashboard({ overview }: { overview: Overview }) {
-  const now = overview.now.getTime();
+function Dashboard({ overview, rangeName }: { overview: Overview; rangeName: string }) {
+  const now = overview.to.getTime();
   const rate = overview.crashFreeRate;
   const status = rate === null ? null : crashFreeHealth(rate);
   const launch = overview.coldLaunchP75;
+  const axis = {
+    bucketSeconds: overview.bucketSeconds,
+    spanMs: overview.to.getTime() - overview.from.getTime(),
+  };
 
   return (
     <div className="flex flex-col gap-4 px-5 py-6 sm:px-8">
-      {/* The one loud element: crash-free share beside the 24-hour error pulse. */}
+      {/* The one loud element: crash-free share beside the sessions it comes from. */}
       <Panel className="grid grid-cols-1 gap-x-8 gap-y-4 p-5 lg:grid-cols-[17rem_minmax(0,1fr)]">
         <div className="flex flex-col justify-between gap-4 lg:border-r lg:border-line lg:pr-8">
           <div>
             <h2 className="text-sm font-semibold text-ink">Crash-free sessions</h2>
-            <p className="mt-0.5 text-xs text-ink-3">Sessions that ended without a crash.</p>
+            <p className="mt-0.5 text-xs text-ink-3">{rangeName}.</p>
           </div>
           <div>
             <p className="font-wide text-hero font-semibold tracking-tight text-ink">
@@ -94,26 +123,18 @@ function Dashboard({ overview }: { overview: Overview }) {
               {status && <HealthBadge health={status.health} label={status.label} />}
               <span className="text-xs text-ink-3">
                 {overview.sessions === 0
-                  ? 'No sessions started yet.'
-                  : `${integer.format(overview.crashedSessions)} of ${integer.format(overview.sessions)} sessions crashed`}
+                  ? 'No sessions started in this range.'
+                  : `${integer.format(overview.crashedSessions)} of ${plural(overview.sessions, 'session', 'sessions')} crashed`}
               </span>
             </div>
           </div>
         </div>
         <div className="min-w-0">
           <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
-            <h2 className="text-sm font-semibold text-ink">Error events per hour</h2>
-            <p className="text-xs text-ink-3">
-              {integer.format(overview.errors)} events, {integer.format(overview.crashes)} crashes
-            </p>
+            <h2 className="text-sm font-semibold text-ink">Sessions</h2>
+            <p className="text-xs text-ink-3">{integer.format(overview.sessions)} started</p>
           </div>
-          <PulseChart
-            points={overview.hours.map((bucket) => ({
-              hour: bucket.hour.toISOString(),
-              errors: bucket.errors,
-              crashes: bucket.crashes,
-            }))}
-          />
+          <SessionsChart timeline={overview.timeline} axis={axis} />
         </div>
       </Panel>
 
@@ -122,17 +143,12 @@ function Dashboard({ overview }: { overview: Overview }) {
           <Stat
             label="Error events"
             value={compact.format(overview.errors)}
-            detail={`${integer.format(overview.crashes)} crashes`}
-          />
-          <Stat
-            label="Open issues"
-            value={compact.format(overview.openIssues)}
-            detail="Across all projects"
+            detail={plural(overview.crashes, 'crash', 'crashes')}
           />
           <Stat
             label="Sessions"
             value={compact.format(overview.sessions)}
-            detail="Started in this window"
+            detail="Started in this range"
           />
           <Stat
             label="Cold launch, p75"
@@ -146,14 +162,38 @@ function Dashboard({ overview }: { overview: Overview }) {
               )
             }
           />
+          <Stat
+            label="Open issues"
+            value={compact.format(overview.openIssues)}
+            detail="Selected projects, any time"
+          />
         </dl>
       </Panel>
 
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <Panel
+          title="Error events"
+          description={`${plural(overview.errors, 'event', 'events')}, ${plural(overview.crashes, 'crash', 'crashes')}`}
+        >
+          <div className="px-5 pt-3 pb-4">
+            <ErrorsChart timeline={overview.timeline} axis={axis} />
+          </div>
+        </Panel>
+        <Panel
+          title="Cold launch, p75"
+          description="Time from process start to the first rendered screen."
+        >
+          <div className="px-5 pt-3 pb-4">
+            <LaunchChart timeline={overview.timeline} axis={axis} targetMs={COLD_LAUNCH_TARGET} />
+          </div>
+        </Panel>
+      </div>
+
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]">
-        <Panel title="Open issues" description="Most recently seen first.">
+        <Panel title="Top issues" description="Most events in this range first.">
           {overview.topIssues.length === 0 ? (
             <p className="px-5 pt-3 pb-5 text-sm text-ink-2">
-              No open issues. New errors from your apps are grouped here as they arrive.
+              No errors in this range. New errors from your apps are grouped here as they arrive.
             </p>
           ) : (
             <div className="mt-3 overflow-x-auto">
@@ -184,6 +224,9 @@ function Dashboard({ overview }: { overview: Overview }) {
                         <div className="flex items-center gap-2">
                           {issue.fatal && <HealthBadge health="critical" label="Crash" />}
                           {issue.regressed && <HealthBadge health="warning" label="Regressed" />}
+                          {issue.status === 'resolved' && (
+                            <HealthBadge health="good" label="Resolved" />
+                          )}
                           <span className="truncate font-semibold text-ink">{issue.type}</span>
                         </div>
                         <p className="font-narrow mt-0.5 truncate text-ink-2" title={issue.message}>
@@ -199,7 +242,7 @@ function Dashboard({ overview }: { overview: Overview }) {
                         {issue.projectName}
                       </td>
                       <td className="px-3 py-2.5 text-right whitespace-nowrap text-ink tabular">
-                        {integer.format(issue.eventCount)}
+                        {integer.format(issue.events)}
                       </td>
                       <td className="px-5 py-2.5 text-right whitespace-nowrap text-ink-3 tabular">
                         <time dateTime={issue.lastSeen.toISOString()}>
@@ -214,7 +257,11 @@ function Dashboard({ overview }: { overview: Overview }) {
           )}
         </Panel>
 
-        <Panel title="Projects" description="Last 24 hours per project." className="xl:self-start">
+        <Panel
+          title="Projects"
+          description={`${rangeName}, per project.`}
+          className="xl:self-start"
+        >
           <ul className="mt-3 border-t border-line">
             {overview.projects.map((project) => {
               const projectRate =
