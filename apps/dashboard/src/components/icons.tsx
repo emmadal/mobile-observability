@@ -85,6 +85,17 @@ export function EventsIcon(props: IconProps) {
   );
 }
 
+export function UsersIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <circle cx="6" cy="5.75" r="2.25" />
+      <path d="M2 14c0-2.5 1.8-4.25 4-4.25s4 1.75 4 4.25" />
+      <circle cx="11.75" cy="6.75" r="1.75" />
+      <path d="M11.75 9.5c1.9 0 3.25 1.5 3.25 3.5" />
+    </Icon>
+  );
+}
+
 export function PerformanceIcon(props: IconProps) {
   return (
     <Icon {...props}>

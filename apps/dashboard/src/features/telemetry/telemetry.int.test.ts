@@ -19,6 +19,7 @@ import { getFilterOptions, getOverview } from '@/features/overview/service';
 import { getNetwork, getScreens, getStartupView } from '@/features/performance/service';
 import { getReleases } from '@/features/releases/service';
 import { getSessionDetail, listSessions } from '@/features/sessions/service';
+import { getUserDetail, listUsers, USERS_PAGE_SIZE } from '@/features/users/service';
 import { createTestProject, db, resetDatabase, type TestProject } from '../../../test/fixtures';
 
 const NOW = new Date();
@@ -39,7 +40,7 @@ interface TelemetryExtras {
   deviceLocale?: string;
   isEmulator?: boolean;
   updateId?: string;
-  userId?: string;
+  userId?: string | null;
   sessionId?: string;
   routeName?: string;
 }
@@ -715,6 +716,95 @@ describe('events', () => {
     const ios = await optionsAndFilters(shop.organizationId, { platform: 'ios' });
     const iosView = await getDeviceBreakdown(ios.options, ios.filters, ios.window);
     expect(iosView.devices.map((device) => device.model)).toEqual(['iPhone15,4']);
+  });
+});
+
+describe('users', () => {
+  it('aggregates the session, crash and error footprint per user', async () => {
+    await addSession(shop.projectId, ago(50), { userId: 'u-apple' });
+    await addSession(shop.projectId, ago(30), { userId: 'u-apple', status: 'crashed' });
+    await addSession(shop.projectId, ago(20), { userId: 'u-google', platform: 'android' });
+    await addSession(shop.projectId, ago(40), { userId: null });
+    await addSession(courierId, ago(15), { userId: 'u-apple' });
+    const issueId = await addIssue(shop.projectId);
+    await addError(shop.projectId, issueId, ago(10), { userId: 'u-apple' });
+    await addError(shop.projectId, issueId, ago(5), { userId: 'u-apple' });
+    await addEvent(shop.projectId, ago(8), 'cart.checkout', { userId: 'u-apple' });
+
+    const { options, filters, window } = await optionsAndFilters(shop.organizationId);
+    const page = await listUsers(options, filters, window, { query: null, cursor: null });
+    expect(page.totals).toEqual({ users: 2, sessions: 4, crashedSessions: 1, errors: 2 });
+    expect(page.users.map((user) => user.userId)).toEqual(['u-apple', 'u-google']);
+    expect(page.users[0]).toMatchObject({
+      sessions: 3,
+      crashedSessions: 1,
+      errors: 2,
+      events: 1,
+      projects: 2,
+    });
+    expect(page.users[1]).toMatchObject({ sessions: 1, crashedSessions: 0, errors: 0 });
+
+    const searched = await listUsers(options, filters, window, {
+      query: 'google',
+      cursor: null,
+    });
+    expect(searched.users.map((user) => user.userId)).toEqual(['u-google']);
+
+    const android = await optionsAndFilters(shop.organizationId, { platform: 'android' });
+    const androidOnly = await listUsers(android.options, android.filters, android.window, {
+      query: null,
+      cursor: null,
+    });
+    expect(androidOnly.users.map((user) => user.userId)).toEqual(['u-google']);
+    expect(androidOnly.totals.users).toBe(1);
+  });
+
+  it('paginates users by last activity with a stable cursor', async () => {
+    for (let index = 0; index < USERS_PAGE_SIZE + 4; index += 1) {
+      await addSession(shop.projectId, ago(index + 1), {
+        userId: `u-${String(index).padStart(3, '0')}`,
+      });
+    }
+
+    const { options, filters, window } = await optionsAndFilters(shop.organizationId);
+    const first = await listUsers(options, filters, window, { query: null, cursor: null });
+    expect(first.users).toHaveLength(USERS_PAGE_SIZE);
+    expect(first.hasMore).toBe(true);
+    expect(first.cursor).toBeTruthy();
+    expect(first.users[0]?.userId).toBe('u-000');
+
+    const second = await listUsers(options, filters, window, {
+      query: null,
+      cursor: first.cursor,
+    });
+    expect(second.users).toHaveLength(4);
+    expect(second.hasMore).toBe(false);
+    const seen = new Set(first.users.map((user) => user.userId));
+    expect(second.users.every((user) => !seen.has(user.userId))).toBe(true);
+  });
+
+  it('returns a user profile scoped to the organization', async () => {
+    await addSession(shop.projectId, ago(50), {
+      userId: 'u-apple',
+      deviceBrand: 'Apple',
+      deviceModel: 'iPhone15,4',
+    });
+    await addSession(shop.projectId, ago(10), { userId: 'u-apple', status: 'crashed' });
+    await addSession(courierId, ago(5), {
+      userId: 'u-apple',
+      deviceBrand: 'Apple',
+      deviceModel: 'iPad13,1',
+    });
+    const detail = await getUserDetail(shop.organizationId, 'u-apple');
+    expect(detail).not.toBeNull();
+    expect(detail?.sessions).toBe(3);
+    expect(detail?.crashedSessions).toBe(1);
+    expect(detail?.projects.map((project) => project.name).sort()).toEqual(['Courier', 'Shop']);
+    expect(detail?.devices.sort()).toEqual(['Apple iPad13,1', 'Apple iPhone15,4']);
+
+    const outsider = await createTestProject('Outsider');
+    expect(await getUserDetail(outsider.organizationId, 'u-apple')).toBeNull();
+    expect(await getUserDetail(shop.organizationId, 'ghost')).toBeNull();
   });
 });
 

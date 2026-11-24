@@ -10,6 +10,7 @@ import {
   ReleasesIcon,
   SessionsIcon,
   SettingsIcon,
+  UsersIcon,
 } from '@/components/icons';
 import { NavLink } from './nav-link';
 import { UserMenu, WorkspaceName } from './user-menu';
@@ -21,6 +22,7 @@ const monitor = [
   { href: '/events', label: 'Events', icon: <EventsIcon /> },
   { href: '/performance', label: 'Performance', icon: <PerformanceIcon /> },
   { href: '/releases', label: 'Releases', icon: <ReleasesIcon /> },
+  { href: '/users', label: 'Users', icon: <UsersIcon /> },
 ];
 
 const manage = [

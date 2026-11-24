@@ -30,11 +30,9 @@ const dateTime = new Intl.DateTimeFormat('en', {
 
 export default function IssueDetailPage({ params }: PageProps<'/issues/[id]'>) {
   return (
-    <>
-      <Suspense fallback={<IssueSkeleton />}>
-        <IssueContent params={params} />
-      </Suspense>
-    </>
+    <Suspense fallback={<IssueSkeleton />}>
+      <IssueContent params={params} />
+    </Suspense>
   );
 }
 
