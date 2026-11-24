@@ -140,7 +140,7 @@ function releaseLabel(release: ReleaseRow): string {
 function ReleaseTable({ view, now }: { view: ReleasesView; now: number }) {
   return (
     <div className="mt-3 overflow-x-auto">
-      <table className="w-full min-w-[62rem] text-left text-xs">
+      <table className="w-full min-w-[68rem] text-left text-xs">
         <thead className="border-y border-line text-ink-3">
           <tr>
             <th scope="col" className="w-[24%] px-5 py-2 font-medium">
@@ -153,10 +153,20 @@ function ReleaseTable({ view, now }: { view: ReleasesView; now: number }) {
               Environment
             </th>
             <th scope="col" className="px-3 py-2 text-right font-medium">
+              Adoption
+            </th>
+            <th scope="col" className="px-3 py-2 text-right font-medium">
               Sessions
             </th>
             <th scope="col" className="px-3 py-2 text-right font-medium">
               Crash-free
+            </th>
+            <th
+              scope="col"
+              className="px-3 py-2 text-right font-medium"
+              title="Users without a crash"
+            >
+              Crash-free users
             </th>
             <th scope="col" className="px-3 py-2 text-right font-medium">
               Crashes
@@ -194,6 +204,9 @@ function ReleaseTable({ view, now }: { view: ReleasesView; now: number }) {
               <td className="px-3 py-3 capitalize text-ink-2">{release.platform}</td>
               <td className="px-3 py-3 text-ink-2">{release.environment}</td>
               <td className="px-3 py-3 text-right text-ink-2 tabular">
+                {formatPercent(release.adoptionRate)}
+              </td>
+              <td className="px-3 py-3 text-right text-ink-2 tabular">
                 {formatCount(release.sessions)}
               </td>
               <td className="px-3 py-3 text-right whitespace-nowrap">
@@ -222,6 +235,9 @@ function ReleaseTable({ view, now }: { view: ReleasesView; now: number }) {
                     />
                   )}
                 </span>
+              </td>
+              <td className="px-3 py-3 text-right text-ink-2 tabular">
+                {release.crashFreeUsers === null ? '—' : formatPercent(release.crashFreeUsers)}
               </td>
               <td className="px-3 py-3 text-right text-ink-2 tabular">
                 {formatCount(release.crashedSessions)}

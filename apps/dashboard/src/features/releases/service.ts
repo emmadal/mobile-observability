@@ -21,6 +21,12 @@ export interface ReleaseRow {
   crashFreeRate: number | null;
   installations: number;
   users: number;
+  /** Users of this release who saw at least one crash. */
+  crashedUsers: number;
+  /** Share of users without a crash, 0..1; null without users. */
+  crashFreeUsers: number | null;
+  /** Share of all sessions in the window running this release, 0..1. */
+  adoptionRate: number;
   errors: number;
   crashes: number;
   /** Observe.logEvent calls in this release. */
@@ -119,6 +125,7 @@ export async function getReleases(
         crashed: sql<number>`(count(*) filter (where ${sessions.status} = 'crashed'))::int`,
         installations: sql<number>`count(distinct ${sessions.installationId})::int`,
         users: sql<number>`count(distinct ${sessions.userId})::int`,
+        crashedUsers: sql<number>`(count(distinct ${sessions.userId}) filter (where ${sessions.status} = 'crashed'))::int`,
         firstSeen: sql<Date>`min(${sessions.startedAt})`,
         lastSeen: sql<Date>`max(${sessions.lastSeenAt})`,
       })
@@ -207,6 +214,9 @@ export async function getReleases(
       crashFreeRate: null,
       installations: Number(row.installations),
       users: Number(row.users),
+      crashedUsers: Number(row.crashedUsers),
+      crashFreeUsers: null,
+      adoptionRate: 0,
       errors: 0,
       crashes: 0,
       logEvents: 0,
@@ -248,12 +258,17 @@ export async function getReleases(
     .map((release) => ({
       ...release,
       crashFreeRate: release.sessions > 0 ? 1 - release.crashedSessions / release.sessions : null,
+      crashFreeUsers: release.users > 0 ? 1 - release.crashedUsers / release.users : null,
     }))
     .sort((a, b) => b.lastSeen.getTime() - a.lastSeen.getTime() || b.sessions - a.sessions)
     .slice(0, 100);
 
   const totalSessions = releases.reduce((total, release) => total + release.sessions, 0);
   const crashedSessions = releases.reduce((total, release) => total + release.crashedSessions, 0);
+  // Adoption is the share of the window's sessions running each release.
+  for (const release of releases) {
+    release.adoptionRate = totalSessions > 0 ? release.sessions / totalSessions : 0;
+  }
   return {
     releases,
     totals: {

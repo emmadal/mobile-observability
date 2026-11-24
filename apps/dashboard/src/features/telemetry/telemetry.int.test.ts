@@ -902,11 +902,12 @@ describe('performance', () => {
 
 describe('releases', () => {
   it('merges sessions, errors and cold launch per release', async () => {
-    await addSession(shop.projectId, ago(50), { appVersion: '1.0.0' });
+    await addSession(shop.projectId, ago(50), { appVersion: '1.0.0', userId: 'u1' });
     await addSession(shop.projectId, ago(40), { appVersion: '1.0.0' });
     await addSession(shop.projectId, ago(30), {
       appVersion: '1.1.0',
       status: 'crashed',
+      userId: 'u2',
     });
     const issueOne = await addIssue(shop.projectId);
     await addError(shop.projectId, issueOne, ago(20), { appVersion: '1.0.0' });
@@ -931,6 +932,10 @@ describe('releases', () => {
       crashes: 1,
       coldLaunchP75: 2000,
       startupSamples: 1,
+      users: 1,
+      crashedUsers: 1,
+      crashFreeUsers: 0,
+      adoptionRate: 1 / 3,
     });
     expect(stable).toMatchObject({
       sessions: 2,
@@ -938,6 +943,10 @@ describe('releases', () => {
       crashFreeRate: 1,
       errors: 1,
       coldLaunchP75: 800,
+      users: 1,
+      crashedUsers: 0,
+      crashFreeUsers: 1,
+      adoptionRate: 2 / 3,
     });
     expect(view.totals).toMatchObject({
       releases: 2,
