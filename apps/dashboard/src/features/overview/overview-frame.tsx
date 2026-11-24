@@ -1,6 +1,6 @@
 'use client';
 
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
   createContext,
   type ReactNode,
@@ -24,6 +24,18 @@ interface OverviewNavigation {
 
 const OverviewContext = createContext<OverviewNavigation | null>(null);
 
+/** Filter keys owned by the toolbar; everything else (status, search, tab) is preserved. */
+const FILTER_PARAMS = [
+  'range',
+  'from',
+  'to',
+  'refresh',
+  'project',
+  'platform',
+  'env',
+  'version',
+] as const;
+
 export function useOverviewNavigation(): OverviewNavigation {
   const context = use(OverviewContext);
   if (!context) throw new Error('useOverviewNavigation must be used inside <OverviewFrame>');
@@ -46,16 +58,22 @@ export function OverviewFrame({
 }) {
   const router = useRouter();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
 
   const update = useCallback(
     (change: Partial<OverviewFilters>) => {
-      const query = toSearchParams({ ...filters, ...change }).toString();
+      const query = new URLSearchParams(searchParams.toString());
+      for (const key of FILTER_PARAMS) query.delete(key);
+      for (const [key, value] of toSearchParams({ ...filters, ...change })) query.set(key, value);
+      // Pagination cursors point into the previous result set.
+      query.delete('cursor');
+      const next = query.toString();
       startTransition(() => {
-        router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+        router.replace(next ? `${pathname}?${next}` : pathname, { scroll: false });
       });
     },
-    [filters, pathname, router],
+    [filters, pathname, router, searchParams],
   );
 
   const refresh = useCallback(() => {

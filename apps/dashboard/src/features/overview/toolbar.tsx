@@ -60,7 +60,7 @@ export function OverviewToolbar({ options, asOf }: { options: FilterOptions; asO
   return (
     <div
       role="toolbar"
-      aria-label="Overview filters"
+      aria-label="Filters"
       className="flex flex-wrap items-center gap-2 border-b border-line px-5 py-3 sm:px-8"
     >
       <TimeRangePicker />

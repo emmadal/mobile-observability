@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { Suspense } from 'react';
 import {
   AccountIcon,
+  EventsIcon,
   IssuesIcon,
   MarkIcon,
   OverviewIcon,
@@ -15,10 +16,11 @@ import { UserMenu, WorkspaceName } from './user-menu';
 
 const monitor = [
   { href: '/', label: 'Overview', icon: <OverviewIcon /> },
-  { href: '/issues', label: 'Issues', icon: <IssuesIcon />, soon: true },
-  { href: '/sessions', label: 'Sessions', icon: <SessionsIcon />, soon: true },
-  { href: '/performance', label: 'Performance', icon: <PerformanceIcon />, soon: true },
-  { href: '/releases', label: 'Releases', icon: <ReleasesIcon />, soon: true },
+  { href: '/issues', label: 'Issues', icon: <IssuesIcon /> },
+  { href: '/sessions', label: 'Sessions', icon: <SessionsIcon /> },
+  { href: '/events', label: 'Events', icon: <EventsIcon /> },
+  { href: '/performance', label: 'Performance', icon: <PerformanceIcon /> },
+  { href: '/releases', label: 'Releases', icon: <ReleasesIcon /> },
 ];
 
 const manage = [

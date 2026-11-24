@@ -76,6 +76,15 @@ export function SessionsIcon(props: IconProps) {
   );
 }
 
+export function EventsIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M3 4.25h10M3 8h10M3 11.75h6" />
+      <circle cx="12.25" cy="11.75" r="1.25" />
+    </Icon>
+  );
+}
+
 export function PerformanceIcon(props: IconProps) {
   return (
     <Icon {...props}>

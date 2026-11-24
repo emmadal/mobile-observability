@@ -3,7 +3,13 @@ import Link from 'next/link';
 import { type ReactNode, Suspense } from 'react';
 import { type Health, HealthBadge, PageHeader, Panel, primaryButtonClass } from '@/components/ui';
 import { ErrorsChart, LaunchChart, SessionsChart } from '@/features/overview/charts';
-import { parseOverviewFilters, rangeLabel, resolveWindow } from '@/features/overview/filters';
+import {
+  type OverviewFilters,
+  parseOverviewFilters,
+  rangeLabel,
+  resolveWindow,
+  toSearchParams,
+} from '@/features/overview/filters';
 import { formatDuration, plural } from '@/features/overview/format';
 import { OverviewFrame } from '@/features/overview/overview-frame';
 import {
@@ -69,7 +75,7 @@ async function OverviewContent({ searchParams }: Pick<PageProps<'/'>, 'searchPar
       filters={filters}
       toolbar={<OverviewToolbar options={options} asOf={now.toISOString()} />}
     >
-      <Dashboard overview={overview} rangeName={rangeLabel(filters.range)} />
+      <Dashboard overview={overview} rangeName={rangeLabel(filters.range)} filters={filters} />
     </OverviewFrame>
   );
 }
@@ -96,7 +102,15 @@ function timeAgo(date: Date, now: number): string {
   return relative.format(Math.round(seconds / 86_400), 'day');
 }
 
-function Dashboard({ overview, rangeName }: { overview: Overview; rangeName: string }) {
+function Dashboard({
+  overview,
+  rangeName,
+  filters,
+}: {
+  overview: Overview;
+  rangeName: string;
+  filters: OverviewFilters;
+}) {
   const now = overview.to.getTime();
   const rate = overview.crashFreeRate;
   const status = rate === null ? null : crashFreeHealth(rate);
@@ -139,11 +153,16 @@ function Dashboard({ overview, rangeName }: { overview: Overview; rangeName: str
       </Panel>
 
       <Panel>
-        <dl className="grid grid-cols-2 divide-line sm:grid-cols-4 sm:divide-x">
+        <dl className="grid grid-cols-2 divide-line sm:grid-cols-3 lg:grid-cols-5 lg:divide-x">
           <Stat
             label="Error events"
             value={compact.format(overview.errors)}
             detail={plural(overview.crashes, 'crash', 'crashes')}
+          />
+          <Stat
+            label="Log events"
+            value={compact.format(overview.logEvents)}
+            detail="Observe.logEvent calls"
           />
           <Stat
             label="Sessions"
@@ -289,6 +308,87 @@ function Dashboard({ overview, rangeName }: { overview: Overview; rangeName: str
           </ul>
         </Panel>
       </div>
+
+      <Panel
+        title="Top events"
+        description="Observe.logEvent calls grouped by name, most frequent first."
+      >
+        {overview.topEvents.length === 0 ? (
+          <p className="px-5 pt-3 pb-5 text-sm text-ink-2">
+            No log events in this range. Call Observe.logEvent from your app and the busiest names
+            appear here.
+          </p>
+        ) : (
+          <div className="mt-3 overflow-x-auto">
+            <table className="w-full min-w-[34rem] text-left text-xs">
+              <thead className="border-y border-line text-ink-3">
+                <tr>
+                  <th scope="col" className="w-[52%] px-5 py-2 font-medium">
+                    Event
+                  </th>
+                  <th scope="col" className="px-3 py-2 text-right font-medium">
+                    Events
+                  </th>
+                  <th scope="col" className="px-3 py-2 text-right font-medium">
+                    Sessions
+                  </th>
+                  <th scope="col" className="px-3 py-2 text-right font-medium">
+                    Flagged
+                  </th>
+                  <th scope="col" className="px-5 py-2 text-right font-medium">
+                    Last seen
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {overview.topEvents.map((event) => {
+                  const query = toSearchParams(filters);
+                  query.set('name', event.name);
+                  return (
+                    <tr
+                      key={event.name}
+                      className="border-b border-line last:border-b-0 hover:bg-raised/40"
+                    >
+                      <td className="max-w-0 px-5 py-2.5">
+                        <Link
+                          href={`/events/detail?${query.toString()}`}
+                          className="block truncate font-mono font-semibold text-ink hover:underline"
+                          title={event.name}
+                        >
+                          {event.name}
+                        </Link>
+                        {event.displayName && (
+                          <p className="font-narrow mt-0.5 truncate text-2xs text-ink-2">
+                            {event.displayName}
+                          </p>
+                        )}
+                      </td>
+                      <td className="px-3 py-2.5 text-right whitespace-nowrap text-ink tabular">
+                        {integer.format(event.events)}
+                      </td>
+                      <td className="px-3 py-2.5 text-right whitespace-nowrap text-ink-2 tabular">
+                        {integer.format(event.sessions)}
+                      </td>
+                      <td className="px-3 py-2.5 text-right whitespace-nowrap tabular">
+                        {event.flagged > 0 ? (
+                          <HealthBadge health="warning" label={integer.format(event.flagged)} />
+                        ) : (
+                          <span className="text-ink-3">—</span>
+                        )}
+                      </td>
+                      <td className="px-5 py-2.5 text-right whitespace-nowrap text-ink-3 tabular">
+                        <time dateTime={event.lastSeen.toISOString()}>
+                          {timeAgo(event.lastSeen, now)}
+                        </time>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Panel>
     </div>
   );
 }

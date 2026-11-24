@@ -14,7 +14,7 @@ import {
   sql,
 } from 'drizzle-orm';
 import { getDb } from '@/db/client';
-import { errorEvents, issues, metrics, projects, sessions } from '@/db/schema';
+import { errorEvents, issues, logEvents, metrics, projects, sessions } from '@/db/schema';
 import {
   bucketStarts,
   type OverviewFilters,
@@ -61,6 +61,7 @@ export interface ProjectHealth {
   sessions: number;
   crashedSessions: number;
   openIssues: number;
+  logEvents: number;
 }
 
 export interface TopIssue {
@@ -74,6 +75,17 @@ export interface TopIssue {
   status: 'open' | 'resolved' | 'ignored';
   /** Events inside the selected window and filters. */
   events: number;
+  lastSeen: Date;
+}
+
+export interface TopEvent {
+  name: string;
+  displayName: string | null;
+  /** Observe.logEvent calls inside the selected window and filters. */
+  events: number;
+  /** Events at warn, error or fatal severity. */
+  flagged: number;
+  sessions: number;
   lastSeen: Date;
 }
 
@@ -92,8 +104,11 @@ export interface Overview {
   crashFreeRate: number | null;
   /** p75 cold launch over the window, ms; null without samples. */
   coldLaunchP75: number | null;
+  /** Observe.logEvent calls in the window. */
+  logEvents: number;
   projects: ProjectHealth[];
   topIssues: TopIssue[];
+  topEvents: TopEvent[];
 }
 
 /** Projects, environments and versions the filter menus offer. */
@@ -139,7 +154,7 @@ export async function getFilterOptions(organizationId: string): Promise<FilterOp
   };
 }
 
-type ScopedTable = typeof errorEvents | typeof sessions | typeof metrics;
+type ScopedTable = typeof errorEvents | typeof sessions | typeof metrics | typeof logEvents;
 
 /** Dimension filters shared by every telemetry table. */
 function dimensions(
@@ -199,8 +214,10 @@ export async function getOverview(
     openIssues: 0,
     crashFreeRate: null,
     coldLaunchP75: null,
+    logEvents: 0,
     projects: [],
     topIssues: [],
+    topEvents: [],
   };
   if (ids.length === 0) return empty;
 
@@ -220,6 +237,11 @@ export async function getOverview(
     gte(metrics.timestamp, from),
     lt(metrics.timestamp, to),
   );
+  const logScope = and(
+    ...dimensions(logEvents, ids, filters),
+    gte(logEvents.timestamp, from),
+    lt(logEvents.timestamp, to),
+  );
 
   const errorBucket = bucketOf(errorEvents.timestamp, bucketSeconds);
   const sessionBucket = bucketOf(sessions.startedAt, bucketSeconds);
@@ -232,9 +254,11 @@ export async function getOverview(
     launchSeries,
     errorTotals,
     sessionTotals,
+    logTotals,
     openIssueRows,
     [launchTotal],
     topIssueRows,
+    topEventRows,
   ] = await Promise.all([
     db
       .select({
@@ -278,6 +302,11 @@ export async function getOverview(
       .where(sessionScope)
       .groupBy(sessions.projectId),
     db
+      .select({ projectId: logEvents.projectId, logEvents: count() })
+      .from(logEvents)
+      .where(logScope)
+      .groupBy(logEvents.projectId),
+    db
       .select({ projectId: issues.projectId, open: count() })
       .from(issues)
       .where(and(inArray(issues.projectId, ids), eq(issues.status, 'open')))
@@ -294,6 +323,22 @@ export async function getOverview(
       .groupBy(errorEvents.issueId)
       .orderBy(desc(sql`2`), desc(sql`3`))
       .limit(8),
+    db
+      .select({
+        name: logEvents.name,
+        displayName: sql<
+          string | null
+        >`(array_agg(${logEvents.displayName} order by ${logEvents.timestamp} desc) filter (where ${logEvents.displayName} is not null))[1]`,
+        events: sql<number>`count(*)::int`,
+        flagged: sql<number>`(count(*) filter (where ${logEvents.severity} in ('warn', 'error', 'fatal')))::int`,
+        sessions: sql<number>`(count(distinct ${logEvents.sessionId}))::int`,
+        lastSeen: sql<Date>`max(${logEvents.timestamp})`,
+      })
+      .from(logEvents)
+      .where(logScope)
+      .groupBy(logEvents.name)
+      .orderBy(desc(sql`count(*)`), desc(sql`max(${logEvents.timestamp})`))
+      .limit(6),
   ]);
 
   const issueIds = topIssueRows.map((row) => row.issueId);
@@ -321,6 +366,14 @@ export async function getOverview(
       ? [{ ...issue, events: toNumber(row.events), lastSeen: new Date(row.lastSeen) }]
       : [];
   });
+  const topEvents: TopEvent[] = topEventRows.map((row) => ({
+    name: row.name,
+    displayName: row.displayName,
+    events: toNumber(row.events),
+    flagged: toNumber(row.flagged),
+    sessions: toNumber(row.sessions),
+    lastSeen: new Date(row.lastSeen),
+  }));
 
   const byBucket = <T extends { bucket: Date }>(rows: T[]) =>
     new Map(rows.map((row) => [new Date(row.bucket).getTime(), row]));
@@ -347,6 +400,7 @@ export async function getOverview(
     new Map(rows.map((row) => [row.projectId, row]));
   const errorsBy = byProject(errorTotals);
   const sessionsBy = byProject(sessionTotals);
+  const logsBy = byProject(logTotals);
   const openBy = byProject(openIssueRows);
   const health: ProjectHealth[] = selected.map((project) => ({
     ...project,
@@ -354,6 +408,7 @@ export async function getOverview(
     sessions: toNumber(sessionsBy.get(project.id)?.sessions),
     crashedSessions: toNumber(sessionsBy.get(project.id)?.crashed),
     openIssues: toNumber(openBy.get(project.id)?.open),
+    logEvents: toNumber(logsBy.get(project.id)?.logEvents),
   }));
 
   const sum = (pick: (row: ProjectHealth) => number) =>
@@ -374,7 +429,9 @@ export async function getOverview(
     openIssues: sum((row) => row.openIssues),
     crashFreeRate: totalSessions > 0 ? 1 - crashedSessions / totalSessions : null,
     coldLaunchP75: launchP75 === null || launchP75 === undefined ? null : Number(launchP75),
+    logEvents: sum((row) => row.logEvents),
     projects: health,
     topIssues,
+    topEvents,
   };
 }
