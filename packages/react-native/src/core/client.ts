@@ -138,7 +138,7 @@ export class ObservabilityClient {
     const { native } = this.platform;
     if (!native.isAvailable) {
       this.platform.warn(
-        '[mobile-observability] Native module not found (Expo Go?). JS errors, requests, screens and sessions are reported; native crashes and launch timings are not.',
+        '[mobile-observability] Native module not found (Expo Go, or an OTA update running on a binary built without this SDK: rebuild the app). JS errors, requests, screens and sessions are reported; native crashes and launch timings are not.',
       );
     }
     this.context = this.buildContext(config.environment);

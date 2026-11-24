@@ -3,6 +3,17 @@
 All notable changes to `@mobile-observability/react-native`. Each section is
 also published as the GitHub release for its `react-native-v<version>` tag.
 
+## Unreleased
+
+### Fixed
+
+- **Device info without the native module.** When the app binary does not
+  contain the native module (Expo Go, or an OTA update running on a binary
+  built before the SDK was added), the SDK now reads React Native's platform
+  constants. Android reports the OS release ("14" instead of API level 34),
+  manufacturer, model and emulator flag, iOS reports its version and device
+  family, and both report the locale. The warning now names the OTA case.
+
 ## 0.2.0
 
 ### Added

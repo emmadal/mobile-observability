@@ -4,6 +4,10 @@ import { createNativeBridge } from '../native/native-bridge';
 import type { NativeAppInfo } from '../native/types';
 import type { StartupTiming } from '../performance/startup';
 import type { ObserveConfig } from '../types';
+import {
+  fallbackAppInfo as buildFallbackAppInfo,
+  type PlatformConstantsLike,
+} from './fallback-info';
 
 interface ErrorUtilsLike {
   getGlobalHandler(): (error: unknown, isFatal?: boolean) => void;
@@ -120,14 +124,19 @@ function readStartupTiming(): StartupTiming | null {
   return result;
 }
 
+function readLocale(): string | null {
+  return safely(() => Intl.DateTimeFormat().resolvedOptions().locale) ?? null;
+}
+
 function fallbackAppInfo(): NativeAppInfo {
-  return {
-    platform: Platform.OS === 'android' ? 'android' : 'ios',
-    version: constantsModule?.default?.expoConfig?.version ?? '0.0.0',
-    build: '0',
-    osVersion: String(Platform.Version),
+  return buildFallbackAppInfo({
+    os: Platform.OS,
+    version: Platform.Version,
+    constants: safely(() => Platform.constants as PlatformConstantsLike),
+    locale: readLocale(),
+    appVersion: constantsModule?.default?.expoConfig?.version,
     isDebugBuild: __DEV__,
-  };
+  });
 }
 
 export function createReactNativePlatform(): PlatformAdapter {
