@@ -1,0 +1,16 @@
+# Files never uploaded by `vercel deploy` from the repository root
+# (the dashboard project builds apps/dashboard inside the pnpm workspace).
+.env
+.env.*
+!.env.example
+node_modules
+.next
+.turbo
+.expo
+*.tsbuildinfo
+docs
+.context
+.serena
+.claude
+apps/example/ios
+apps/example/android
