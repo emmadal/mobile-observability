@@ -270,7 +270,10 @@ function IssueTable({ issues, now }: { issues: IssueListItem[]; now: number }) {
         </thead>
         <tbody>
           {issues.map((issue) => (
-            <tr key={issue.id} className="border-b border-line last:border-b-0 hover:bg-raised/40">
+            <tr
+              key={issue.id}
+              className="relative cursor-pointer border-b border-line last:border-b-0 hover:bg-raised/40"
+            >
               <td className="max-w-0 px-5 py-3">
                 <div className="flex items-center gap-2">
                   {issue.fatal && <HealthBadge health="critical" label="Crash" />}
@@ -287,7 +290,7 @@ function IssueTable({ issues, now }: { issues: IssueListItem[]; now: number }) {
                   <FixBadge origin={issue.origin} />
                   <Link
                     href={`/issues/${issue.id}`}
-                    className="truncate font-semibold text-ink hover:underline"
+                    className="truncate font-semibold text-ink after:absolute after:inset-0 hover:underline"
                   >
                     {issue.type}
                   </Link>

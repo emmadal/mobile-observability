@@ -14,6 +14,7 @@ import { OverviewFrame } from '@/features/overview/overview-frame';
 import { getFilterOptions } from '@/features/overview/service';
 import { OverviewToolbar } from '@/features/overview/toolbar';
 import { StartupHistogram, StartupSeriesChart } from '@/features/performance/charts';
+import { NetworkTable } from '@/features/performance/network-table';
 import {
   getNetwork,
   getScreens,
@@ -460,7 +461,7 @@ async function NetworkTab({
             traffic.
           </p>
         ) : (
-          <NetworkTable network={network} />
+          <NetworkTable network={network} now={now} />
         )}
         <p className="border-t border-line px-5 py-2.5 text-2xs text-ink-3">
           Query strings and headers are never stored.
@@ -780,73 +781,6 @@ function NetworkStat({ label, value, detail }: { label: string; value: string; d
       <dt className="text-xs text-ink-3">{label}</dt>
       <dd className="font-wide text-lg font-semibold tracking-tight text-ink">{value}</dd>
       <dd className="text-2xs text-ink-3">{detail}</dd>
-    </div>
-  );
-}
-
-function NetworkTable({ network }: { network: NetworkView }) {
-  return (
-    <div className="mt-3 overflow-x-auto">
-      <table className="w-full min-w-[48rem] text-left text-xs">
-        <thead className="border-y border-line text-ink-3">
-          <tr>
-            <th scope="col" className="w-[42%] px-5 py-2 font-medium">
-              Endpoint
-            </th>
-            <th scope="col" className="px-3 py-2 text-right font-medium">
-              Requests
-            </th>
-            <th scope="col" className="px-3 py-2 text-right font-medium">
-              Errors
-            </th>
-            <th scope="col" className="px-3 py-2 text-right font-medium">
-              Error rate
-            </th>
-            <th scope="col" className="px-3 py-2 text-right font-medium">
-              P50
-            </th>
-            <th scope="col" className="px-3 py-2 text-right font-medium">
-              P90
-            </th>
-            <th scope="col" className="px-5 py-2 text-right font-medium">
-              P95
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {network.rows.map((row) => (
-            <tr
-              key={`${row.method}:${row.host}:${row.path}`}
-              className="border-b border-line last:border-b-0"
-            >
-              <td className="max-w-0 px-5 py-2.5">
-                <p className="truncate font-mono text-2xs text-ink-2">
-                  <span className="font-semibold text-ink">{row.method}</span> {row.host}
-                  {row.path}
-                </p>
-              </td>
-              <td className="px-3 py-2.5 text-right text-ink-2 tabular">
-                {formatCount(row.requests)}
-              </td>
-              <td className="px-3 py-2.5 text-right text-ink-2 tabular">
-                {formatCount(row.errorCount)}
-              </td>
-              <td className="px-3 py-2.5 text-right text-ink-2 tabular">
-                {formatPercent(row.errorRate)}
-              </td>
-              <td className="px-3 py-2.5 text-right whitespace-nowrap text-ink-2 tabular">
-                {row.p50Ms === null ? '—' : formatDuration(row.p50Ms)}
-              </td>
-              <td className="px-3 py-2.5 text-right whitespace-nowrap text-ink-2 tabular">
-                {row.p90Ms === null ? '—' : formatDuration(row.p90Ms)}
-              </td>
-              <td className="px-5 py-2.5 text-right whitespace-nowrap text-ink tabular">
-                {row.p95Ms === null ? '—' : formatDuration(row.p95Ms)}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
     </div>
   );
 }

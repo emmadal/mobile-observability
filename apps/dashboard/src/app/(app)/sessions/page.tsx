@@ -282,12 +282,12 @@ function SessionTable({ sessions, now }: { sessions: SessionListItem[]; now: num
           {sessions.map((session) => (
             <tr
               key={session.id}
-              className="border-b border-line last:border-b-0 hover:bg-raised/40"
+              className="relative cursor-pointer border-b border-line last:border-b-0 hover:bg-raised/40"
             >
               <td className="px-5 py-2.5">
                 <Link
                   href={`/sessions/${session.id}`}
-                  className="font-mono text-xs font-medium text-ink hover:underline"
+                  className="font-mono text-xs font-medium text-ink after:absolute after:inset-0 hover:underline focus-visible:after:absolute"
                 >
                   {shortId(session.sessionId)}
                 </Link>
