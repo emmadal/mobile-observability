@@ -252,6 +252,8 @@ export const requests = pgTable(
     timeToFirstByteMs: doublePrecision(),
     error: text(),
     routeName: text(),
+    /** Connection type reported by the SDK's native layer: wifi, cellular... */
+    networkType: text(),
     /** W3C trace id propagated by the SDK's `traceparent` header. */
     traceId: text(),
   },

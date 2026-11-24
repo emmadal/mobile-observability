@@ -752,6 +752,9 @@ function RecentRequests({ requests, now }: { requests: RecentRequest[]; now: num
                         {request.traceId.slice(0, 8)}
                       </span>
                     )}
+                    {request.networkType && (
+                      <span className="block text-2xs text-ink-3">{request.networkType}</span>
+                    )}
                   </td>
                   <td className="px-5 py-2.5 text-right whitespace-nowrap text-ink-3 tabular">
                     <time

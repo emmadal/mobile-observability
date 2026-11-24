@@ -347,6 +347,7 @@ describe('ingest processing', () => {
           durationMs: 1250,
           timeToFirstByteMs: 1180,
           traceId: '4bf92f3577b34da6a3ce929d0e0e4736',
+          networkType: 'wifi',
         },
       ]),
     );
@@ -357,6 +358,7 @@ describe('ingest processing', () => {
       durationMs: 1250,
       timeToFirstByteMs: 1180,
       traceId: '4bf92f3577b34da6a3ce929d0e0e4736',
+      networkType: 'wifi',
     });
   });
 

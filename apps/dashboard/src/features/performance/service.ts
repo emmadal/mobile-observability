@@ -87,6 +87,8 @@ export interface RecentRequest {
   ttfbMs: number | null;
   /** W3C trace id the SDK propagated upstream. */
   traceId: string | null;
+  /** Connection type reported by the SDK's native layer: wifi, cellular... */
+  networkType: string | null;
   /** Transport-level failure, e.g. a timeout; null when the server answered. */
   error: string | null;
   projectName: string;
@@ -419,6 +421,7 @@ export async function getNetwork(
         durationMs: requests.durationMs,
         ttfbMs: requests.timeToFirstByteMs,
         traceId: requests.traceId,
+        networkType: requests.networkType,
         error: requests.error,
         projectName: projects.name,
         appVersion: requests.appVersion,

@@ -511,6 +511,12 @@ export class ObservabilityClient {
       ...(request.traceId ? { traceId: request.traceId } : {}),
       ...(request.error ? { error: request.error } : {}),
       ...(route ? { routeName: route.routeName } : {}),
+      ...(this.platform.native.isAvailable
+        ? safeCall(() => {
+            const type = this.platform.native.getDeviceState().networkType;
+            return type ? { networkType: type } : {};
+          }, {})
+        : {}),
     });
     this.addBreadcrumb({
       category: 'request',

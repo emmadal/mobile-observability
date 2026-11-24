@@ -259,6 +259,8 @@ export interface SessionRequest {
   ttfbMs: number | null;
   /** W3C trace id the SDK propagated upstream. */
   traceId: string | null;
+  /** Connection type reported by the SDK's native layer: wifi, cellular... */
+  networkType: string | null;
   error: string | null;
 }
 
@@ -373,6 +375,7 @@ export async function getSessionDetail(
         durationMs: requests.durationMs,
         ttfbMs: requests.timeToFirstByteMs,
         traceId: requests.traceId,
+        networkType: requests.networkType,
         error: requests.error,
       })
       .from(requests)

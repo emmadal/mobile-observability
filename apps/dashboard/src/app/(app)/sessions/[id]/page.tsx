@@ -306,6 +306,9 @@ function RequestsPanel({ detail }: { detail: SessionDetailView }) {
                         {request.traceId.slice(0, 8)}
                       </span>
                     )}
+                    {request.networkType && (
+                      <span className="block text-2xs text-ink-3">{request.networkType}</span>
+                    )}
                   </td>
                 </tr>
               ))}

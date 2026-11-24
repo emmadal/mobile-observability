@@ -531,6 +531,7 @@ async function storeRequests(
         bytesSent: item.bytesSent ?? null,
         timeToFirstByteMs: item.timeToFirstByteMs ?? null,
         traceId: item.traceId ?? null,
+        networkType: item.networkType ?? null,
         error: item.error ?? null,
         routeName: item.routeName ?? null,
       })),

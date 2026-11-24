@@ -125,6 +125,8 @@ export const requestItemSchema = z.object({
   traceId: id.optional(),
   error: truncated(256).optional(),
   routeName: truncated(256).optional(),
+  /** Connection type reported by the native layer: wifi, cellular, ethernet... */
+  networkType: truncated(16).optional(),
 });
 
 export const eventItemSchema = z.object({
