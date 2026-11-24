@@ -43,6 +43,7 @@ const DEFAULTS = {
   errorHandlingEnabled: true,
   hangTrackingEnabled: true,
   hangThresholdMs: DEFAULT_HANG_THRESHOLD_MS,
+  resourceSampleIntervalMs: 300_000,
   networkTrackingEnabled: true,
   sessionTimeoutMs: 30_000,
   flushIntervalMs: 10_000,
@@ -190,6 +191,8 @@ export class ObservabilityClient {
 
     this.cleanups.push(this.platform.appState.subscribe((state) => this.onAppStateChange(state)));
     if (config.hangTrackingEnabled) this.installHangWatchdog(config.hangThresholdMs);
+    if (config.resourceSampleIntervalMs && config.resourceSampleIntervalMs > 0)
+      this.installResourceSampler(config.resourceSampleIntervalMs);
     const warm = native.addWarmLaunchListener((durationMs) =>
       this.startup.onWarmLaunch(durationMs),
     );
@@ -558,6 +561,38 @@ export class ObservabilityClient {
   /** Test helper used by the example app to verify native crash capture end to end. */
   triggerNativeCrash(kind: 'signal' | 'exception'): void {
     this.platform.native.triggerTestCrash(kind);
+  }
+
+  /**
+   * Samples native device state while the app is in the foreground: battery,
+   * thermal pressure, connection type and frame stats land as internal
+   * `$device.health` events, visible on the Events page with attributes.
+   */
+  private installResourceSampler(intervalMs: number): void {
+    const sample = () => {
+      if (this.appStateStatus === 'background') return;
+      const { native } = this.platform;
+      if (!native.isAvailable) return;
+      const state = safeCall(() => native.getDeviceState(), null);
+      const frames = safeCall(() => native.getFrameStats(), null);
+      if (!state && !frames) return;
+      this.logEvent('$device.health', {
+        severity: 'debug',
+        attributes: {
+          ...(state ?? {}),
+          ...(frames
+            ? {
+                'frames.slow': frames.slowFrames,
+                'frames.frozen': frames.frozenFrames,
+                'frames.delayMs': Math.round(frames.totalDelayMs),
+              }
+            : {}),
+          ...(this.queue ? { 'queue.items': this.queue.length } : {}),
+        },
+      });
+    };
+    const timer = setInterval(sample, intervalMs);
+    this.cleanups.push(() => clearInterval(timer));
   }
 
   private installHangWatchdog(thresholdMs: number | undefined): void {

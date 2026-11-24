@@ -43,6 +43,8 @@ export interface ObserveConfig {
   hangTrackingEnabled?: boolean;
   /** JS thread stall reported as a hang (default 2000 ms). */
   hangThresholdMs?: number;
+  /** Sample battery, thermal state and frame stats every N ms, 0 disables (default 300000). */
+  resourceSampleIntervalMs?: number;
   /** Record fetch/XHR requests (default true). */
   networkTrackingEnabled?: boolean;
   /** Request URLs to ignore: substring or RegExp. */
