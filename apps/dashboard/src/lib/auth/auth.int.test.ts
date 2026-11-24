@@ -114,6 +114,24 @@ describe('invite-only workspace', () => {
       headers,
     });
 
+  it('lets exactly one of two concurrent first-run sign-ups claim the workspace', async () => {
+    const [first, second] = await Promise.all([
+      signUp({ email: 'racer-one@example.com' }),
+      signUp({ email: 'racer-two@example.com' }),
+    ]);
+    expect([first.status, second.status].sort()).toEqual([200, 403]);
+    const winner = first.ok ? first : second;
+    const loser = first.ok ? 'racer-two@example.com' : 'racer-one@example.com';
+    const rows = await db.select({ email: user.email }).from(user);
+    expect(rows.map((row) => row.email)).not.toContain(loser);
+    await expect(
+      auth.api.createOrganization({
+        body: { name: 'Acme Inc', slug: 'acme-inc' },
+        headers: sessionHeaders(winner),
+      }),
+    ).resolves.toMatchObject({ slug: 'acme-inc' });
+  });
+
   it('refuses a second account without an invitation', async () => {
     await setUpOwner();
     await expect(signUp({ email: 'stranger@example.com' })).resolves.toMatchObject({

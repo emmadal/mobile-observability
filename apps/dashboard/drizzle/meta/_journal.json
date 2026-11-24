@@ -22,6 +22,13 @@
       "when": 1795387247033,
       "tag": "0002_first_black_widow",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1795483631590,
+      "tag": "0003_worried_squadron_supreme",
+      "breakpoints": true
     }
   ]
 }

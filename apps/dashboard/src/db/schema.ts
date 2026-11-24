@@ -3,6 +3,7 @@ import { sql } from 'drizzle-orm';
 import {
   bigserial,
   boolean,
+  check,
   customType,
   doublePrecision,
   index,
@@ -298,4 +299,18 @@ export const sourceMaps = pgTable(
   (table) => [
     uniqueIndex('source_maps_bundle_idx').on(table.projectId, table.platform, table.bundleKey),
   ],
+);
+
+/**
+ * First-run claim: a single row, written atomically by whichever account
+ * creates the workspace first, so two concurrent setups cannot both win.
+ */
+export const workspaceClaim = pgTable(
+  'workspace_claim',
+  {
+    id: smallint().primaryKey().default(1),
+    email: text().notNull(),
+    claimedAt: createdAt(),
+  },
+  (table) => [check('workspace_claim_singleton', sql`${table.id} = 1`)],
 );

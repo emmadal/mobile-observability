@@ -13,7 +13,7 @@ import { clearKeyCache } from '@/server/keys/resolve';
 export const db = getDb();
 
 export async function resetDatabase(): Promise<void> {
-  await db.execute(sql`truncate table organization, "user", projects cascade`);
+  await db.execute(sql`truncate table organization, "user", projects, workspace_claim cascade`);
   clearKeyCache();
 }
 

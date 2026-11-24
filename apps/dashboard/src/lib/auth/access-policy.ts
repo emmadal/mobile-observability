@@ -1,6 +1,6 @@
 import { and, count, eq, gt, sql } from 'drizzle-orm';
-import { invitation, member, organization, user } from '@/db/auth-schema';
 import { getDb } from '@/db/client';
+import { invitation, member, organization, user, workspaceClaim } from '@/db/schema';
 
 /**
  * Workspace access policy. The first account sets the workspace up and owns
@@ -32,19 +32,46 @@ export async function hasPendingInvitation(email: string): Promise<boolean> {
   return Boolean(row);
 }
 
-/** Accounts are created during first-run setup or from an invitation. */
+/**
+ * Atomically claims the workspace for this email. The singleton row makes
+ * concurrent first-run setups race on one INSERT: exactly one email wins, and
+ * only that email can claim again (a retry after a failed sign-up).
+ */
+async function claimWorkspace(email: string): Promise<boolean> {
+  const db = getDb();
+  const normalized = email.toLowerCase();
+  const [inserted] = await db
+    .insert(workspaceClaim)
+    .values({ id: 1, email: normalized })
+    .onConflictDoNothing()
+    .returning({ email: workspaceClaim.email });
+  if (inserted) return true;
+  const [claim] = await db.select({ email: workspaceClaim.email }).from(workspaceClaim).limit(1);
+  return claim?.email === normalized;
+}
+
+/** Accounts are created by the first-run claimant or from an invitation. */
 export async function canCreateAccount(email: string): Promise<boolean> {
-  return (await isWorkspaceUnclaimed()) || (await hasPendingInvitation(email));
+  if (await hasPendingInvitation(email)) return true;
+  return (await isWorkspaceUnclaimed()) && (await claimWorkspace(email));
 }
 
 /**
- * Organizations are created by the workspace owner only: the first account
- * (when no organization exists yet) or an existing organization owner.
+ * Organizations are created by the workspace owner only: the first-run
+ * claimant (while no organization exists) or an existing organization owner.
  */
 export async function canCreateOrganization(userId: string): Promise<boolean> {
   const db = getDb();
   const [existing] = await db.select({ id: organization.id }).from(organization).limit(1);
-  if (!existing) return true;
+  if (!existing) {
+    const [claimant] = await db
+      .select({ id: user.id })
+      .from(user)
+      .innerJoin(workspaceClaim, eq(workspaceClaim.email, sql`lower(${user.email})`))
+      .where(eq(user.id, userId))
+      .limit(1);
+    return Boolean(claimant);
+  }
   const [ownership] = await db
     .select({ id: member.id })
     .from(member)
