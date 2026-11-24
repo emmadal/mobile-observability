@@ -1,6 +1,6 @@
 {
   "name": "@mobile-observability/react-native",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Crash reporting, error grouping, startup/screen performance and network monitoring for Expo and React Native apps.",
   "keywords": [
     "react-native",

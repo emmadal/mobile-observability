@@ -98,7 +98,7 @@ class CrashReporter(private val context: Context, private val files: Observabili
         type = throwable.javaClass.name,
         message = throwable.message ?: "",
         fatal = true,
-        timestamp = System.currentTimeMillis(),
+        timestamp = System.currentTimeMillis().toDouble(),
         frames = frames,
         rawStack = "Thread: ${thread.name}\n${Log.getStackTraceString(throwable)}",
         context = contextJson,
