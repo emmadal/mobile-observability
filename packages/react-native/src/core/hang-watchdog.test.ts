@@ -12,12 +12,10 @@ function setup(options: { threshold?: number; foreground?: boolean } = {}) {
     now: () => now,
   });
   const hangs: number[] = [];
-  watchdog.start(
-    ((_handler: () => void) => {
-      tick = _handler;
-      return 0 as unknown as ReturnType<typeof setInterval>;
-    }) as typeof setInterval,
-  );
+  watchdog.start(((_handler: () => void) => {
+    tick = _handler;
+    return 0 as unknown as ReturnType<typeof setInterval>;
+  }) as typeof setInterval);
   return {
     hangs,
     advance(ms: number) {
