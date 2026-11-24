@@ -4,13 +4,13 @@ plugins {
 }
 
 group = 'expo.modules.mobileobservability'
-version = '0.2.0'
+version = '0.2.1'
 
 android {
   namespace "expo.modules.mobileobservability"
   defaultConfig {
-    versionCode 3
-    versionName '0.2.0'
+    versionCode 4
+    versionName '0.2.1'
   }
   testOptions {
     unitTests.returnDefaultValues = true

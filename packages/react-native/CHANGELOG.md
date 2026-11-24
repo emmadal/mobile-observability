@@ -3,7 +3,7 @@
 All notable changes to `@mobile-observability/react-native`. Each section is
 also published as the GitHub release for its `react-native-v<version>` tag.
 
-## Unreleased
+## 0.2.1
 
 ### Fixed
 
