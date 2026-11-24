@@ -28,6 +28,7 @@ import type {
   ObserveConfig,
 } from '../types';
 import { BreadcrumbBuffer } from './breadcrumbs';
+import { DEFAULT_HANG_THRESHOLD_MS, HangWatchdog } from './hang-watchdog';
 import { isSampledIn, uuid } from './ids';
 import { toJsonObject } from './json';
 import type { AppStateStatus, PlatformAdapter } from './platform';
@@ -40,6 +41,8 @@ const DEFAULTS = {
   dispatchInDebug: false,
   enabled: true,
   errorHandlingEnabled: true,
+  hangTrackingEnabled: true,
+  hangThresholdMs: DEFAULT_HANG_THRESHOLD_MS,
   networkTrackingEnabled: true,
   sessionTimeoutMs: 30_000,
   flushIntervalMs: 10_000,
@@ -65,6 +68,8 @@ export class ObservabilityClient {
   private sessions: SessionManager | null = null;
   private network: NetworkTracker | null = null;
   private navigation: NavigationTracker | null = null;
+  private hangWatchdog: HangWatchdog | null = null;
+  private appStateStatus: AppStateStatus = 'active';
   private user: { id: string } | undefined;
   private flushTimer: ReturnType<typeof setInterval> | null = null;
   private crashContextTimer: ReturnType<typeof setTimeout> | null = null;
@@ -184,6 +189,7 @@ export class ObservabilityClient {
       this.installNetworkTracking(config.endpoint, config.ignoreUrls ?? []);
 
     this.cleanups.push(this.platform.appState.subscribe((state) => this.onAppStateChange(state)));
+    if (config.hangTrackingEnabled) this.installHangWatchdog(config.hangThresholdMs);
     const warm = native.addWarmLaunchListener((durationMs) =>
       this.startup.onWarmLaunch(durationMs),
     );
@@ -530,6 +536,7 @@ export class ObservabilityClient {
   }
 
   private onAppStateChange(state: AppStateStatus): void {
+    this.appStateStatus = state;
     if (state === 'background') {
       this.logEvent('$app.background', { severity: 'debug' });
       this.addBreadcrumb({ category: 'app_state', message: 'background' });
@@ -545,6 +552,49 @@ export class ObservabilityClient {
   /** Test helper used by the example app to verify native crash capture end to end. */
   triggerNativeCrash(kind: 'signal' | 'exception'): void {
     this.platform.native.triggerTestCrash(kind);
+  }
+
+  private installHangWatchdog(thresholdMs: number | undefined): void {
+    const watchdog = new HangWatchdog({
+      hangThresholdMs: thresholdMs,
+      isForeground: () => this.appStateStatus !== 'background',
+      onHang: (durationMs) => this.reportHang(durationMs),
+    });
+    watchdog.start(setInterval, clearInterval);
+    this.hangWatchdog = watchdog;
+    this.cleanups.push(() => {
+      this.hangWatchdog?.stop(clearInterval);
+      this.hangWatchdog = null;
+    });
+  }
+
+  /**
+   * A blocked JS thread is a user-visible freeze: reported as a handled,
+   * non-fatal error of kind `hang` so it groups into its own issue.
+   */
+  private reportHang(durationMs: number): void {
+    if (!this.dispatching) return;
+    const seconds = Math.max(1, Math.round(durationMs / 1000));
+    const route = this.navigation?.currentRoute;
+    const event: ErrorEvent = {
+      type: 'error',
+      eventId: uuid(),
+      timestamp: this.platform.now(),
+      origin: 'js',
+      kind: 'hang',
+      fatal: false,
+      handled: true,
+      exception: {
+        type: 'AppHang',
+        message: `JS thread blocked for ~${seconds} s`,
+        frames: [],
+      },
+      breadcrumbs: this.breadcrumbs.snapshot(),
+      ...(this.sessions?.sessionId ? { sessionId: this.sessions.sessionId } : {}),
+      ...(route ? { routeName: route.routeName } : {}),
+    };
+    this.enqueue(event);
+    this.addBreadcrumb({ category: 'app_state', message: `hang ~${seconds} s` });
   }
 
   // MARK: User

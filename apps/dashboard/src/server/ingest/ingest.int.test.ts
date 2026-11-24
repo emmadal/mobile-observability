@@ -88,6 +88,32 @@ describe('ingest processing', () => {
     expect(issue?.eventCount).toBe(1);
   });
 
+  it('groups JS thread hangs into a single AppHang issue', async () => {
+    const hang = (eventId: string, seconds: number) => ({
+      type: 'error' as const,
+      eventId,
+      timestamp: Date.now(),
+      origin: 'js' as const,
+      kind: 'hang' as const,
+      fatal: false,
+      handled: true,
+      exception: {
+        type: 'AppHang',
+        message: `JS thread blocked for ~${seconds} s`,
+        frames: [],
+      },
+      breadcrumbs: [],
+    });
+    await send(envelope([hang('h1', 2), hang('h2', 7), hang('h3', 3)]));
+    const [issue] = await db.select().from(issues);
+    expect(issue).toMatchObject({ kind: 'hang', type: 'AppHang', eventCount: 3 });
+    const events = await db.select().from(errorEvents);
+    expect(events).toHaveLength(3);
+    // Hangs never mark the session crashed: they are handled stalls.
+    const sessionRows = await db.select().from(sessions);
+    expect(sessionRows.every((session) => session.status !== 'crashed')).toBe(true);
+  });
+
   it('stores the device brand, model, locale and emulator flag', async () => {
     const item = errorItem({ sessionId: 's-device' });
     await send(

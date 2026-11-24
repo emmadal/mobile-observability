@@ -39,6 +39,10 @@ export interface ObserveConfig {
   integrations?: ObserveIntegrations;
   /** Capture uncaught JS errors and unhandled promise rejections (default true). */
   errorHandlingEnabled?: boolean;
+  /** Report JS thread stalls over two seconds as hangs (default true). */
+  hangTrackingEnabled?: boolean;
+  /** JS thread stall reported as a hang (default 2000 ms). */
+  hangThresholdMs?: number;
   /** Record fetch/XHR requests (default true). */
   networkTrackingEnabled?: boolean;
   /** Request URLs to ignore: substring or RegExp. */

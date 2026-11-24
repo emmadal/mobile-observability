@@ -274,6 +274,9 @@ function IssueTable({ issues, now }: { issues: IssueListItem[]; now: number }) {
               <td className="max-w-0 px-5 py-3">
                 <div className="flex items-center gap-2">
                   {issue.fatal && <HealthBadge health="critical" label="Crash" />}
+                  {issue.kind === 'hang' && <HealthBadge health="warning" label="Hang" />}
+                  {issue.kind === 'anr' && <HealthBadge health="critical" label="ANR" />}
+                  {issue.kind === 'oom' && <HealthBadge health="critical" label="OOM" />}
                   {issue.regressed && <HealthBadge health="warning" label="Regressed" />}
                   {issue.status === 'resolved' && <HealthBadge health="good" label="Resolved" />}
                   {issue.status === 'ignored' && (

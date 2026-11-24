@@ -42,6 +42,7 @@ export interface IssueListItem {
   message: string;
   culprit: string | null;
   origin: 'js' | 'native';
+  kind: string;
   status: 'open' | 'resolved' | 'ignored';
   fatal: boolean;
   regressed: boolean;
@@ -151,6 +152,7 @@ export async function listIssues(
       message: issues.message,
       culprit: issues.culprit,
       origin: issues.origin,
+      kind: issues.kind,
       status: issues.status,
       fatal: issues.fatal,
       regressed: issues.regressed,
