@@ -1,6 +1,7 @@
 import { HEADERS, LIMITS } from '@mobile-observability/protocol';
 import { parseEnvelope } from '@mobile-observability/protocol/schema';
 import type { Database } from '@/db/client';
+import { evaluateAlerts } from '../alerts/evaluate';
 import { resolveKey } from '../keys/resolve';
 import { BodyDecodeError, BodyTooLargeError, decodeBody, readLimitedBody } from './body';
 import { clientContextOf } from './client-context';
@@ -63,5 +64,7 @@ export async function handleEnvelope(
     now(),
     clientContextOf(request),
   );
+  // Threshold alerts re-evaluate at most once a minute per project.
+  await evaluateAlerts(db, project.projectId, new Date(now()));
   return json(202, { accepted: result.accepted, dropped: result.dropped + parsed.droppedItems });
 }

@@ -57,6 +57,13 @@
       "when": 1795526303126,
       "tag": "0007_request-network-type",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1795526362068,
+      "tag": "0008_alert-rules",
+      "breakpoints": true
     }
   ]
 }

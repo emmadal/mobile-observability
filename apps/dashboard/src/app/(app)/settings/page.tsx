@@ -1,6 +1,8 @@
 import Link from 'next/link';
 import { Suspense } from 'react';
 import { PageHeader, Panel } from '@/components/ui';
+import { AlertsPanel } from '@/features/alerts/alerts-panel';
+import { listAlertRules } from '@/features/alerts/service';
 import { getOrgContext } from '@/features/projects/access';
 import { CreateProjectForm } from '@/features/projects/create-project-form';
 import { ProjectCard } from '@/features/projects/project-card';
@@ -112,6 +114,12 @@ async function SettingsContent({ searchParams }: SettingsPageProps) {
           )}
         </div>
       </Panel>
+
+      <AlertsPanel
+        rules={await listAlertRules(context.organizationId)}
+        projects={page.projects.map((project) => ({ id: project.id, name: project.name }))}
+        canManage={isOwner}
+      />
 
       <TeamPanel context={context} origin={origin} />
     </div>

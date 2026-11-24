@@ -34,6 +34,12 @@ export const issueStatus = pgEnum('issue_status', ['open', 'resolved', 'ignored'
 export const errorOrigin = pgEnum('error_origin', ['js', 'native']);
 export const sessionStatus = pgEnum('session_status', ['ok', 'errored', 'crashed', 'abnormal']);
 export const platform = pgEnum('platform', ['ios', 'android']);
+export const alertMetric = pgEnum('alert_metric', [
+  'crash_free_rate',
+  'api_error_rate',
+  'startup_p75',
+]);
+export const alertWindow = pgEnum('alert_window', ['1h', '6h', '24h']);
 
 export const projects = pgTable(
   'projects',
@@ -332,4 +338,25 @@ export const workspaceClaim = pgTable(
     claimedAt: createdAt(),
   },
   (table) => [check('workspace_claim_singleton', sql`${table.id} = 1`)],
+);
+
+/** Threshold alerts per project, evaluated at ingest with a 60 s throttle. */
+export const alertRules = pgTable(
+  'alert_rules',
+  {
+    id: uuid().defaultRandom().primaryKey(),
+    projectId: uuid()
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    metric: alertMetric().notNull(),
+    window: alertWindow().notNull(),
+    /** crash_free_rate fires below, api_error_rate and startup_p75 above. */
+    threshold: doublePrecision().notNull(),
+    createdAt: createdAt(),
+    /** null until first evaluation, then 'firing' or 'ok'. */
+    lastStatus: text(),
+    lastFiredAt: timestamp({ withTimezone: true }),
+    lastCheckedAt: timestamp({ withTimezone: true }),
+  },
+  (table) => [index('alert_rules_project_idx').on(table.projectId)],
 );

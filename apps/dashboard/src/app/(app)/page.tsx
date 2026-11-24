@@ -20,6 +20,7 @@ import {
 } from '@/features/overview/service';
 import { OverviewToolbar } from '@/features/overview/toolbar';
 import { getOrgContext } from '@/features/projects/access';
+import { ALERT_METRIC_LABELS, type AlertMetric, getFiringAlerts } from '@/server/alerts/evaluate';
 
 export const metadata = { title: 'Overview' };
 
@@ -75,7 +76,12 @@ async function OverviewContent({ searchParams }: Pick<PageProps<'/'>, 'searchPar
       filters={filters}
       toolbar={<OverviewToolbar options={options} asOf={now.toISOString()} />}
     >
-      <Dashboard overview={overview} rangeName={rangeLabel(filters.range)} filters={filters} />
+      <Dashboard
+        overview={overview}
+        rangeName={rangeLabel(filters.range)}
+        filters={filters}
+        alerts={await getFiringAlerts(context.organizationId)}
+      />
     </OverviewFrame>
   );
 }
@@ -106,10 +112,17 @@ function Dashboard({
   overview,
   rangeName,
   filters,
+  alerts,
 }: {
   overview: Overview;
   rangeName: string;
   filters: OverviewFilters;
+  alerts: {
+    projectName: string;
+    metric: AlertMetric;
+    threshold: number;
+    lastFiredAt: Date | null;
+  }[];
 }) {
   const now = overview.to.getTime();
   const rate = overview.crashFreeRate;
@@ -122,6 +135,24 @@ function Dashboard({
 
   return (
     <div className="flex flex-col gap-4 px-5 py-6 sm:px-8">
+      {alerts.length > 0 && (
+        <div
+          role="alert"
+          className="flex flex-col gap-1.5 rounded-[10px] border border-critical/40 bg-critical/5 px-5 py-3"
+        >
+          <p className="text-xs font-semibold text-critical">
+            {alerts.length === 1 ? '1 alert firing' : `${alerts.length} alerts firing`}
+          </p>
+          <ul className="flex flex-col gap-0.5 text-xs text-ink-2">
+            {alerts.map((alert) => (
+              <li key={`${alert.projectName}:${alert.metric}`}>
+                {alert.projectName} — {ALERT_METRIC_LABELS[alert.metric]} crossed its threshold
+                {alert.lastFiredAt ? ` (${timeAgo(alert.lastFiredAt, now)})` : ''}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       {/* The one loud element: crash-free share beside the sessions it comes from. */}
       <Panel className="grid grid-cols-1 gap-x-8 gap-y-4 p-5 lg:grid-cols-[17rem_minmax(0,1fr)]">
         <div className="flex flex-col justify-between gap-4 lg:border-r lg:border-line lg:pr-8">
