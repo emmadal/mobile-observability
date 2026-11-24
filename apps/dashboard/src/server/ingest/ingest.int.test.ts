@@ -88,6 +88,36 @@ describe('ingest processing', () => {
     expect(issue?.eventCount).toBe(1);
   });
 
+  it('stores the device brand, model, locale and emulator flag', async () => {
+    const item = errorItem({ sessionId: 's-device' });
+    await send(
+      envelope([item], {
+        device: {
+          platform: 'ios',
+          osVersion: '26.1',
+          model: 'iPhone18,1',
+          manufacturer: 'Apple',
+          locale: 'fr-FR',
+          isEmulator: false,
+        },
+      }),
+    );
+    const [event] = await db.select().from(errorEvents);
+    expect(event).toMatchObject({
+      deviceBrand: 'Apple',
+      deviceModel: 'iPhone18,1',
+      deviceLocale: 'fr-FR',
+      isEmulator: false,
+    });
+    const [session] = await db.select().from(sessions);
+    expect(session).toMatchObject({
+      deviceBrand: 'Apple',
+      deviceModel: 'iPhone18,1',
+      deviceLocale: 'fr-FR',
+      isEmulator: false,
+    });
+  });
+
   it('shifts timestamps when the device clock is off by more than 60 s (AC-15)', async () => {
     const now = Date.now();
     const skew = 2 * 60 * 60_000; // device two hours behind

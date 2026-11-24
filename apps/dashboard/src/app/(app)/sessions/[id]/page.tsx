@@ -370,7 +370,19 @@ function DevicePanel({ detail }: { detail: SessionDetailView }) {
         <Row label="Environment" value={session.environment} />
         <Row label="Platform" value={session.platform} />
         <Row label="OS version" value={session.osVersion ?? 'Unknown'} />
-        <Row label="Device" value={session.deviceModel ?? 'Unknown'} />
+        <Row
+          label="Device"
+          value={
+            session.deviceBrand || session.deviceModel
+              ? [session.deviceBrand, session.deviceModel].filter(Boolean).join(' ')
+              : 'Unknown'
+          }
+        />
+        <Row label="Locale" value={session.deviceLocale ?? '—'} />
+        <Row
+          label="Environment type"
+          value={session.isEmulator === null ? '—' : session.isEmulator ? 'Emulator' : 'Physical'}
+        />
         <Row label="App version" value={`${session.appVersion} (${session.appBuild})`} />
         <Row label="Runtime" value={session.runtimeVersion ?? '—'} mono />
         <Row label="Update" value={session.updateId ?? '—'} mono />
