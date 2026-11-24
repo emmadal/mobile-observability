@@ -46,7 +46,8 @@
     "expo-module.config.json",
     "!**/__tests__",
     "!**/*.test.*",
-    "!android/src/test"
+    "!android/src/test",
+    "CHANGELOG.md"
   ],
   "scripts": {
     "build": "node -e \"require('node:fs').rmSync('build',{recursive:true,force:true})\" && tsc -p tsconfig.build.json",
