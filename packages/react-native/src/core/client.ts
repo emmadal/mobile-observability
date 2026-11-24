@@ -35,7 +35,7 @@ import type { AppStateStatus, PlatformAdapter } from './platform';
 import { redactSensitive } from './redact';
 import { type CrashContext, convertPendingReport, type JsFatalReport } from './reports';
 
-export const SDK_INFO = { name: '@mobile-observability/react-native', version: '0.1.1' } as const;
+export const SDK_INFO = { name: '@mobile-observability/react-native', version: '0.2.0' } as const;
 
 const DEFAULTS = {
   sampleRate: 1,
@@ -604,7 +604,8 @@ export class ObservabilityClient {
   /**
    * Connectivity transitions become internal `$net.offline` / `$net.online`
    * events, so offline windows are visible on the Events page and can be
-   * correlated with failed requests. The first observation only initializes.
+   * correlated with failed requests. The first observation only initializes,
+   * except that starting offline opens an offline window.
    */
   private checkNetworkTransition(): void {
     const { native } = this.platform;
@@ -614,9 +615,10 @@ export class ObservabilityClient {
       undefined as boolean | undefined,
     );
     if (connected === undefined || connected === this.lastNetworkConnected) return;
-    const wentOffline = this.lastNetworkConnected !== null && !connected;
+    const first = this.lastNetworkConnected === null;
     this.lastNetworkConnected = connected;
-    this.logEvent(wentOffline ? '$net.offline' : '$net.online', { severity: 'debug' });
+    if (first && connected) return;
+    this.logEvent(connected ? '$net.online' : '$net.offline', { severity: 'debug' });
   }
 
   private installHangWatchdog(thresholdMs: number | undefined): void {
