@@ -83,7 +83,7 @@ pnpm --filter @mobile-observability/dashboard db:migrate
 pnpm dev                                 # dashboard on http://localhost:3000
 ```
 
-Open `/signup` to set up the workspace: the first account owns it, and everyone else joins through invite links the owner creates in Settings → People. Then create a project and copy the ingest key from Settings.
+Open `/signup` to set up the workspace: the first account owns it, and everyone else joins through invite links the owner creates in Settings → People. Then create a project in Settings and copy its ready-made `.env` block (see [Connect the app to the dashboard](#connect-the-app-to-the-dashboard-three-keys)).
 
 ## Self-hosting
 
@@ -144,15 +144,37 @@ npx expo install @mobile-observability/react-native
 
 Then rebuild the native app (`npx expo run:ios` / `run:android`, or a new EAS build). Bare React Native apps run `npx install-expo-modules@latest` once first. Full setup: [`packages/react-native/README.md`](packages/react-native/README.md).
 
+### Connect the app to the dashboard: three keys
+
+Each project card in **Settings** shows the app's `.env` block, already filled with this dashboard's URL and the project's ingest key. The upload token is shown once, as a `MOBS_UPLOAD_TOKEN=` line, when the project is created or the token rotated:
+
+| Variable                    | What it is                     | Used by                | Secret |
+| --------------------------- | ------------------------------ | ---------------------- | ------ |
+| `EXPO_PUBLIC_MOBS_ENDPOINT` | Dashboard URL                  | the app and `mobs` CLI | no     |
+| `EXPO_PUBLIC_MOBS_KEY`      | Public ingest key (`mobs_pk_`) | the app                | no     |
+| `MOBS_UPLOAD_TOKEN`         | Upload token (`mobs_sk_`)      | `mobs` CLI only        | yes    |
+
+```sh
+# .env: shipped inside the app bundle anyway, safe to commit
+EXPO_PUBLIC_MOBS_ENDPOINT=https://observability.example.com
+EXPO_PUBLIC_MOBS_KEY=mobs_pk_...
+
+# .env.local: git-ignored; in CI or EAS use a secret / sensitive variable instead
+MOBS_UPLOAD_TOKEN=mobs_sk_...
+```
+
+Never give the upload token the `EXPO_PUBLIC_` prefix: Expo inlines `EXPO_PUBLIC_*` values into the JS bundle, where anyone can read them. The ingest key can only send telemetry, so it is fine in the app. The CLI reads the same `.env` files, so the endpoint is configured once for both.
+
 The API, as used by `apps/example`:
 
 ```tsx
 // app/_layout.tsx
 import { Observe, ObserveErrorBoundary, ObserveRoot } from '@mobile-observability/react-native';
 
+// Expo only inlines EXPO_PUBLIC_* in your own code, so pass them here.
 Observe.configure({
-  apiKey: '<your ingest key>',
-  endpoint: 'https://observability.example.com',
+  apiKey: process.env.EXPO_PUBLIC_MOBS_KEY,
+  endpoint: process.env.EXPO_PUBLIC_MOBS_ENDPOINT,
 });
 
 function RootLayout() {
@@ -181,10 +203,10 @@ Symbolicated stack traces require the matching source map. After an EAS Update:
 
 ```sh
 eas update --json > update.json
-mobs sourcemaps upload-eas --dist dist --eas-json update.json \
-  --endpoint https://observability.example.com \
-  --token <project upload token>
+mobs sourcemaps upload-eas --dist dist --eas-json update.json
 ```
+
+`mobs` takes `EXPO_PUBLIC_MOBS_ENDPOINT` and `MOBS_UPLOAD_TOKEN` from the environment or the project's `.env` / `.env.local`, so no flags are needed (`--endpoint` and `--token` still override them).
 
 Or a single map:
 

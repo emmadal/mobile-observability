@@ -4,13 +4,11 @@ Crash reporting, error grouping, sessions, startup and screen performance, and n
 
 The public API mirrors `expo-observe`, so switching is mostly a change of import.
 
-**Status: beta (v0.2).**
-
 ## Requirements
 
 - Expo SDK ≥ 56, or React Native ≥ 0.83 with the New Architecture
 - iOS 16.4 or later, Android
-- A running dashboard and the project's **ingest key** (dashboard: Settings, project card)
+- A running dashboard and the project's `.env` block (dashboard: Settings, project card), which holds `EXPO_PUBLIC_MOBS_ENDPOINT` and `EXPO_PUBLIC_MOBS_KEY`
 
 Bare React Native apps need Expo modules once: `npx install-expo-modules@latest`.
 
@@ -26,13 +24,25 @@ Installing the SDK adds only the SDK, its wire-protocol package and a gzip libra
 
 ## Configure
 
+The app needs two values; source-map uploads add a third, used only by the [`mobs` CLI](../cli/README.md):
+
+```sh
+# .env: shipped inside the app bundle anyway, safe to commit
+EXPO_PUBLIC_MOBS_ENDPOINT=https://observability.example.com   # your dashboard URL
+EXPO_PUBLIC_MOBS_KEY=mobs_pk_...                              # public ingest key; Settings > project card shows both lines
+
+# .env.local: git-ignored, never EXPO_PUBLIC_
+MOBS_UPLOAD_TOKEN=mobs_sk_...                                 # secret upload token, CLI only
+```
+
 ```tsx
 // app/_layout.tsx
 import { Observe, ObserveErrorBoundary, ObserveRoot } from '@mobile-observability/react-native';
 
+// Expo inlines EXPO_PUBLIC_* only in your own code (not in node_modules), so pass them here.
 Observe.configure({
-  apiKey: '<your ingest key>',
-  endpoint: 'https://observability.example.com',
+  apiKey: process.env.EXPO_PUBLIC_MOBS_KEY,
+  endpoint: process.env.EXPO_PUBLIC_MOBS_ENDPOINT,
   integrations: { 'expo-router': true },
 });
 
