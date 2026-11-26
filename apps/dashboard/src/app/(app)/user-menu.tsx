@@ -1,13 +1,12 @@
 import Link from 'next/link';
-import { signOut } from '@/app/actions/auth';
-import { SignOutIcon } from '@/components/icons';
 import { getOrgContext } from '@/features/projects/access';
 import { getCurrentUser } from '@/lib/auth/session';
+import { SignOutButton } from './sign-out-button';
 
 /**
  * Server component: the session is read here, inside the layout's Suspense
- * boundary, and only a narrow DTO reaches this point. Sign-out is a Server
- * Action invoked through a plain form — no client-side fetch involved.
+ * boundary, and only a narrow DTO reaches this point. Sign-out asks for
+ * confirmation, then runs a Server Action through a plain form.
  */
 export async function UserMenu() {
   const [user, context] = await Promise.all([getCurrentUser(), getOrgContext()]);
@@ -27,16 +26,7 @@ export async function UserMenu() {
           {role}, {user.email}
         </p>
       </Link>
-      <form action={signOut}>
-        <button
-          type="submit"
-          className="flex size-8 items-center justify-center rounded-md text-ink-3 hover:bg-raised hover:text-ink"
-          title="Sign out"
-        >
-          <SignOutIcon />
-          <span className="sr-only">Sign out</span>
-        </button>
-      </form>
+      <SignOutButton />
     </div>
   );
 }
