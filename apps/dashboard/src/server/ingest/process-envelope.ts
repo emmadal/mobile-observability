@@ -344,6 +344,13 @@ async function applyIssueDeltas(
   `);
 }
 
+/**
+ * Apps usually call Observe.setUser after the session has started (sign-in, or
+ * a persisted login restored asynchronously), so a later envelope's user wins.
+ * Envelopes without a user (signed out) keep the session's last known user.
+ */
+const latestUserId = sql`coalesce(excluded.user_id, ${sessions.userId})`;
+
 /** Fatal errors crash their session; others mark it errored (creating it if unseen). */
 async function upsertErrorSessions(
   tx: Executor,
@@ -410,6 +417,7 @@ async function upsertErrorSessions(
         errorCount: sql`${sessions.errorCount} + excluded.error_count`,
         lastSeenAt: sql`greatest(${sessions.lastSeenAt}, excluded.last_seen_at)`,
         endedAt: sql`coalesce(${sessions.endedAt}, excluded.ended_at)`,
+        userId: latestUserId,
       },
     });
 }
@@ -462,6 +470,7 @@ async function upsertSession(
         startedAt: sql`least(${sessions.startedAt}, excluded.started_at)`,
         endedAt: sql`coalesce(excluded.ended_at, ${sessions.endedAt})`,
         lastSeenAt: sql`greatest(${sessions.lastSeenAt}, excluded.last_seen_at)`,
+        userId: latestUserId,
       },
     });
 }

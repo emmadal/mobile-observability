@@ -158,8 +158,9 @@ async function UsersContent({ searchParams }: Pick<PageProps<'/users'>, 'searchP
         >
           {page.users.length === 0 ? (
             <p className="px-5 pt-3 pb-5 text-sm text-ink-2">
-              No identified users in this range. Users appear once your app sends Observe.identify
-              or sets a user id.
+              No identified users in this range. Users appear once your app calls{' '}
+              <code className="font-mono text-xs text-ink">{'Observe.setUser({ id })'}</code> after
+              sign-in. Sessions without a user id are counted under Sessions, not here.
             </p>
           ) : (
             <UserTable users={page.users} filters={filters} now={now.getTime()} />

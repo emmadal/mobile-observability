@@ -266,6 +266,25 @@ describe('ingest processing', () => {
     expect(session?.endedAt).not.toBeNull();
   });
 
+  it('attributes a session to the user identified after it started, and keeps it on sign-out', async () => {
+    const startedAt = Date.now() - 10_000;
+    const session = (init: boolean) =>
+      ({ type: 'session', sessionId: 's1', startedAt, status: 'ok', errorCount: 0, init }) as const;
+    // The session starts before the app restores or signs in its user.
+    await send(envelope([session(true)]));
+    await send(envelope([errorItem({ sessionId: 's1' })], { user: { id: 'user-42' } }));
+    let [row] = await db.select().from(sessions);
+    expect(row?.userId).toBe('user-42');
+
+    await send(envelope([session(false)]));
+    [row] = await db.select().from(sessions);
+    expect(row?.userId).toBe('user-42');
+
+    await send(envelope([session(false)], { user: { id: 'user-43' } }));
+    [row] = await db.select().from(sessions);
+    expect(row?.userId).toBe('user-43');
+  });
+
   it('labels JS issues for OTA updates and native issues for new builds', async () => {
     await send(
       envelope([
