@@ -1,5 +1,6 @@
 import type { Database } from '@/db/client';
 import { sourceMaps } from '@/db/schema';
+import { isForeignKeyViolation } from '../db/pg-errors';
 import { BodyDecodeError, BodyTooLargeError, decodeBody, readLimitedBody } from '../ingest/body';
 import { resolveKey } from '../keys/resolve';
 import { invalidateSourceMap } from './store';
@@ -42,20 +43,28 @@ export async function handleSourceMapUpload(request: Request, db: Database): Pro
   }
 
   const content = Buffer.from(text, 'utf8');
-  await db
-    .insert(sourceMaps)
-    .values({
-      projectId: project.projectId,
-      platform,
-      bundleKey,
-      fileName,
-      content,
-      sizeBytes: content.byteLength,
-    })
-    .onConflictDoUpdate({
-      target: [sourceMaps.projectId, sourceMaps.platform, sourceMaps.bundleKey],
-      set: { fileName, content, sizeBytes: content.byteLength, uploadedAt: new Date() },
-    });
+  try {
+    await db
+      .insert(sourceMaps)
+      .values({
+        projectId: project.projectId,
+        platform,
+        bundleKey,
+        fileName,
+        content,
+        sizeBytes: content.byteLength,
+      })
+      .onConflictDoUpdate({
+        target: [sourceMaps.projectId, sourceMaps.platform, sourceMaps.bundleKey],
+        set: { fileName, content, sizeBytes: content.byteLength, uploadedAt: new Date() },
+      });
+  } catch (error) {
+    // The project was deleted while this instance still cached its token.
+    if (isForeignKeyViolation(error)) {
+      return Response.json({ error: 'invalid_upload_token' }, { status: 401 });
+    }
+    throw error;
+  }
   invalidateSourceMap(project.projectId, platform, bundleKey);
   return Response.json(
     { ok: true, platform, bundleKey, sizeBytes: content.byteLength },

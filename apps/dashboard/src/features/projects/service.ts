@@ -18,6 +18,9 @@ export interface ProjectSummary {
   sdkEnabled: boolean;
   /** Public ingest key; null only if every key was revoked. */
   ingestKey: string | null;
+  ingestKeyCreatedAt: Date | null;
+  /** The upload token is a secret stored hashed: only its prefix can be shown again. */
+  uploadToken: { prefix: string; createdAt: Date } | null;
 }
 
 export interface ProjectListPage {
@@ -41,7 +44,14 @@ export class ProjectNotFoundError extends Error {
   }
 }
 
-/** One page of projects, newest first, with their active ingest key. */
+export class ProjectNameMismatchError extends Error {
+  constructor() {
+    super('The typed name does not match the project name');
+    this.name = 'ProjectNameMismatchError';
+  }
+}
+
+/** One page of projects, newest first, with their active keys. */
 export async function listProjects(
   organizationId: string,
   rawCursor: string | null,
@@ -76,7 +86,13 @@ export async function listProjects(
   const keys =
     page.length > 0
       ? await db
-          .select({ projectId: apiKeys.projectId, publicKey: apiKeys.publicKey })
+          .select({
+            projectId: apiKeys.projectId,
+            kind: apiKeys.kind,
+            publicKey: apiKeys.publicKey,
+            prefix: apiKeys.keyPrefix,
+            createdAt: apiKeys.createdAt,
+          })
           .from(apiKeys)
           .where(
             and(
@@ -84,17 +100,20 @@ export async function listProjects(
                 apiKeys.projectId,
                 page.map((project) => project.id),
               ),
-              eq(apiKeys.kind, 'ingest'),
               isNull(apiKeys.revokedAt),
             ),
           )
           .orderBy(desc(apiKeys.createdAt))
       : [];
 
-  const ingestKeys = new Map<string, string>();
+  // Newest active key of each kind wins (rotation revokes the previous one).
+  const ingestKeys = new Map<string, { key: string; createdAt: Date }>();
+  const uploadTokens = new Map<string, { prefix: string; createdAt: Date }>();
   for (const key of keys) {
-    if (key.publicKey && !ingestKeys.has(key.projectId)) {
-      ingestKeys.set(key.projectId, key.publicKey);
+    if (key.kind === 'ingest' && key.publicKey && !ingestKeys.has(key.projectId)) {
+      ingestKeys.set(key.projectId, { key: key.publicKey, createdAt: key.createdAt });
+    } else if (key.kind === 'upload' && !uploadTokens.has(key.projectId)) {
+      uploadTokens.set(key.projectId, { prefix: key.prefix, createdAt: key.createdAt });
     }
   }
 
@@ -105,7 +124,9 @@ export async function listProjects(
       slug: project.slug,
       createdAt: project.createdAt,
       sdkEnabled: project.sdkEnabled,
-      ingestKey: ingestKeys.get(project.id) ?? null,
+      ingestKey: ingestKeys.get(project.id)?.key ?? null,
+      ingestKeyCreatedAt: ingestKeys.get(project.id)?.createdAt ?? null,
+      uploadToken: uploadTokens.get(project.id) ?? null,
     })),
     cursor: next ? encodeCursor(next) : null,
     hasMore,
@@ -238,4 +259,38 @@ export async function rotateKey(input: {
 
   clearKeyCache();
   return generated.key;
+}
+
+/**
+ * Permanently deletes a project and all of its data. Every table holding
+ * project data (keys, sessions, errors, issues, events, requests, metrics,
+ * endpoint templates, source maps, alert rules) references projects with
+ * ON DELETE CASCADE, so this one delete removes everything atomically.
+ * The caller must type the project's exact name.
+ */
+export async function deleteProject(input: {
+  organizationId: string;
+  projectId: string;
+  confirmName: string;
+}): Promise<{ name: string }> {
+  const deleted = await getDb().transaction(async (tx) => {
+    const [project] = await tx
+      .select({ id: projects.id, name: projects.name })
+      .from(projects)
+      .where(
+        and(eq(projects.id, input.projectId), eq(projects.organizationId, input.organizationId)),
+      )
+      .for('update')
+      .limit(1);
+    if (!project) throw new ProjectNotFoundError();
+    if (input.confirmName.trim() !== project.name) throw new ProjectNameMismatchError();
+
+    await tx.delete(projects).where(eq(projects.id, project.id));
+    return project;
+  });
+
+  // Its keys stop working in this process now; other instances get a 401 on
+  // their next write (the foreign key fails) and drop the key within the TTL.
+  clearKeyCache();
+  return { name: deleted.name };
 }

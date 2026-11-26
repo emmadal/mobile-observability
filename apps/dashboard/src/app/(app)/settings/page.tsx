@@ -13,7 +13,7 @@ import { getRequestOrigin } from '@/lib/request-origin';
 export const metadata = { title: 'Settings' };
 
 interface SettingsPageProps {
-  searchParams: Promise<{ cursor?: string | string[] }>;
+  searchParams: Promise<{ cursor?: string | string[]; deleted?: string | string[] }>;
 }
 
 export default function SettingsPage({ searchParams }: SettingsPageProps) {
@@ -48,7 +48,7 @@ export default function SettingsPage({ searchParams }: SettingsPageProps) {
 }
 
 async function SettingsContent({ searchParams }: SettingsPageProps) {
-  const [{ cursor }, context, origin] = await Promise.all([
+  const [{ cursor, deleted }, context, origin] = await Promise.all([
     searchParams,
     getOrgContext(),
     getRequestOrigin(),
@@ -76,6 +76,15 @@ async function SettingsContent({ searchParams }: SettingsPageProps) {
         className="scroll-mt-6"
       >
         <div className="mt-4 border-t border-line">
+          {typeof deleted === 'string' && deleted && (
+            <p
+              role="status"
+              className="border-b border-line bg-good/5 px-5 py-3 text-xs text-ink-2"
+            >
+              <span className="font-medium text-ink">{deleted.slice(0, 80)}</span> and all of its
+              data were deleted.
+            </p>
+          )}
           {isOwner && <CreateProjectForm origin={origin} />}
 
           {page.projects.length === 0 ? (

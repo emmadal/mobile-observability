@@ -1,9 +1,16 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { redirect } from 'next/navigation';
 import { z } from 'zod';
 import { getOrgContext } from '@/features/projects/access';
-import { createProject, ProjectNotFoundError, rotateKey } from '@/features/projects/service';
+import {
+  createProject,
+  deleteProject,
+  ProjectNameMismatchError,
+  ProjectNotFoundError,
+  rotateKey,
+} from '@/features/projects/service';
 import type { KeyKind } from '@/server/keys/keys';
 
 const nameSchema = z.object({
@@ -12,6 +19,11 @@ const nameSchema = z.object({
     .trim()
     .min(2, 'Project name must be at least 2 characters.')
     .max(80, 'Project name must be at most 80 characters.'),
+});
+
+const deleteSchema = z.object({
+  projectId: z.uuid(),
+  confirmName: z.string().max(200),
 });
 
 const rotateSchema = z.object({
@@ -28,6 +40,10 @@ export interface CreateProjectState {
     ingestKey: string;
     uploadToken: string;
   };
+}
+
+export interface DeleteProjectState {
+  error?: string;
 }
 
 export interface RotateKeyState {
@@ -93,4 +109,42 @@ export async function rotateKeyAction(
     if (error instanceof ProjectNotFoundError) return { error: 'Project not found.' };
     throw error;
   }
+}
+
+/**
+ * Owner-only. Deletes the project and, through ON DELETE CASCADE, every row
+ * of its data, then returns to Settings with a confirmation notice.
+ */
+export async function deleteProjectAction(
+  _state: DeleteProjectState,
+  formData: FormData,
+): Promise<DeleteProjectState> {
+  const context = await getOrgContext();
+  if (!context) return { error: 'No organization found for this account.' };
+  if (context.role !== 'owner') return { error: 'Only the workspace owner can delete projects.' };
+
+  const parsed = deleteSchema.safeParse({
+    projectId: formData.get('projectId'),
+    confirmName: formData.get('confirmName'),
+  });
+  if (!parsed.success) return { error: 'Invalid request.' };
+
+  let name: string;
+  try {
+    ({ name } = await deleteProject({
+      organizationId: context.organizationId,
+      projectId: parsed.data.projectId,
+      confirmName: parsed.data.confirmName,
+    }));
+  } catch (error) {
+    if (error instanceof ProjectNotFoundError) return { error: 'Project not found.' };
+    if (error instanceof ProjectNameMismatchError) {
+      return { error: 'Type the project name exactly as shown to confirm.' };
+    }
+    throw error;
+  }
+
+  // Every page lists or filters by project.
+  revalidatePath('/', 'layout');
+  redirect(`/settings?deleted=${encodeURIComponent(name)}#projects`);
 }

@@ -2,6 +2,7 @@ import { HEADERS, LIMITS } from '@mobile-observability/protocol';
 import { parseEnvelope } from '@mobile-observability/protocol/schema';
 import type { Database } from '@/db/client';
 import { evaluateAlerts } from '../alerts/evaluate';
+import { isForeignKeyViolation } from '../db/pg-errors';
 import { resolveKey } from '../keys/resolve';
 import { BodyDecodeError, BodyTooLargeError, decodeBody, readLimitedBody } from './body';
 import { clientContextOf } from './client-context';
@@ -57,13 +58,14 @@ export async function handleEnvelope(
   if (!parsed.ok)
     return json(400, { error: 'invalid_envelope', issues: parsed.issues.slice(0, 20) });
 
-  const result = await processEnvelope(
-    db,
-    project,
-    parsed.envelope,
-    now(),
-    clientContextOf(request),
-  );
+  let result: Awaited<ReturnType<typeof processEnvelope>>;
+  try {
+    result = await processEnvelope(db, project, parsed.envelope, now(), clientContextOf(request));
+  } catch (error) {
+    // The project was deleted while this instance still cached its key.
+    if (isForeignKeyViolation(error)) return json(401, { error: 'invalid_api_key' });
+    throw error;
+  }
   // Threshold alerts re-evaluate at most once a minute per project.
   await evaluateAlerts(db, project.projectId, new Date(now()));
   return json(202, { accepted: result.accepted, dropped: result.dropped + parsed.droppedItems });
