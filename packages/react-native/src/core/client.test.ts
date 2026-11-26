@@ -75,6 +75,7 @@ describe('ObservabilityClient configuration', () => {
     await flushMicrotasks();
     expect(client.isDispatching).toBe(false);
     expect(platform.warnings.join()).toMatch(/apiKey/);
+    expect(platform.warnings.join()).toMatch(/EXPO_PUBLIC_MOBS_KEY.*EXPO_PUBLIC_MOBS_ENDPOINT/);
   });
 
   it('reads apiKey and endpoint from app config extra', async () => {

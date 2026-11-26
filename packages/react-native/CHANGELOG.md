@@ -3,6 +3,16 @@
 All notable changes to `@mobile-observability/react-native`. Each section is
 also published as the GitHub release for its `react-native-v<version>` tag.
 
+## Unreleased
+
+### Changed
+
+- **Setup uses three variables.** The docs and the dashboard's Settings page
+  now configure the app with `EXPO_PUBLIC_MOBS_ENDPOINT` and
+  `EXPO_PUBLIC_MOBS_KEY` (passed to `Observe.configure`), and source-map
+  uploads with the secret `MOBS_UPLOAD_TOKEN`. When the key or endpoint is
+  missing, the SDK's warning now names both variables.
+
 ## 0.2.1
 
 ### Fixed

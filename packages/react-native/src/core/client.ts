@@ -150,7 +150,9 @@ export class ObservabilityClient {
       return;
     }
     if (!config.apiKey || !config.endpoint) {
-      this.platform.warn('[mobile-observability] Missing apiKey or endpoint: not dispatching.');
+      this.platform.warn(
+        '[mobile-observability] Missing apiKey or endpoint: not dispatching. Set EXPO_PUBLIC_MOBS_KEY and EXPO_PUBLIC_MOBS_ENDPOINT in .env and pass them to Observe.configure.',
+      );
       return;
     }
     if (!isSampledIn(this.context.installationId, config.sampleRate)) return;
