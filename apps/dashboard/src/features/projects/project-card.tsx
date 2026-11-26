@@ -1,17 +1,20 @@
 import { HealthBadge } from '@/components/ui';
 import { CopyField } from './copy-field';
+import { appEnv, MOBS_ENV } from './env-snippet';
 import { RotateKeyForm } from './rotate-key-form';
 import type { ProjectSummary } from './service';
 
 interface ProjectCardProps {
   project: ProjectSummary;
   canRotate: boolean;
+  /** This dashboard's URL, which the SDK and the CLI send to. */
+  origin: string;
 }
 
 const dateFormat = new Intl.DateTimeFormat('en', { dateStyle: 'medium' });
 
 /** One project row of the Settings list: identity, keys, owner actions. */
-export function ProjectCard({ project, canRotate }: ProjectCardProps) {
+export function ProjectCard({ project, canRotate, origin }: ProjectCardProps) {
   return (
     <article
       id={`project-${project.id}`}
@@ -35,9 +38,10 @@ export function ProjectCard({ project, canRotate }: ProjectCardProps) {
       <div className="flex min-w-0 flex-col gap-4">
         {project.ingestKey ? (
           <CopyField
-            label="Public ingest key"
-            value={project.ingestKey}
-            note="Safe to ship inside the app: it can only send telemetry."
+            label="App .env"
+            value={appEnv(origin, project.ingestKey)}
+            multiline
+            note={`Pass both to Observe.configure. Safe to ship inside the app: the key can only send telemetry, and the CLI reads ${MOBS_ENV.endpoint} too.`}
           />
         ) : (
           <p className="text-xs text-ink-3">No active ingest key. Rotate to issue a new one.</p>
@@ -45,8 +49,11 @@ export function ProjectCard({ project, canRotate }: ProjectCardProps) {
 
         <div className="flex flex-col gap-4 rounded-md border border-line bg-night/40 p-4">
           <p className="text-2xs text-ink-3">
-            The secret upload token is stored hashed and only shown when it is created. CI uses it
-            with <code className="font-mono text-ink-2">mobs sourcemaps upload</code>.
+            The secret upload token is stored hashed and only shown when it is created. Put it in{' '}
+            <code className="font-mono text-ink-2">{MOBS_ENV.uploadToken}</code> (a CI secret or a
+            git-ignored <code className="font-mono text-ink-2">.env.local</code>) for{' '}
+            <code className="font-mono text-ink-2">mobs sourcemaps upload</code>; never prefix it
+            with <code className="font-mono text-ink-2">EXPO_PUBLIC_</code>.
           </p>
           {canRotate ? (
             <>

@@ -76,7 +76,7 @@ async function SettingsContent({ searchParams }: SettingsPageProps) {
         className="scroll-mt-6"
       >
         <div className="mt-4 border-t border-line">
-          {isOwner && <CreateProjectForm />}
+          {isOwner && <CreateProjectForm origin={origin} />}
 
           {page.projects.length === 0 ? (
             <p className="px-5 py-5 text-sm text-ink-2">
@@ -86,7 +86,7 @@ async function SettingsContent({ searchParams }: SettingsPageProps) {
             </p>
           ) : (
             page.projects.map((project) => (
-              <ProjectCard key={project.id} project={project} canRotate={isOwner} />
+              <ProjectCard key={project.id} project={project} canRotate={isOwner} origin={origin} />
             ))
           )}
 

@@ -20,6 +20,7 @@ import {
 } from '@/features/overview/service';
 import { OverviewToolbar } from '@/features/overview/toolbar';
 import { getOrgContext } from '@/features/projects/access';
+import { MOBS_ENV } from '@/features/projects/env-snippet';
 import { ALERT_METRIC_LABELS, type AlertMetric, getFiringAlerts } from '@/server/alerts/evaluate';
 
 export const metadata = { title: 'Overview' };
@@ -247,7 +248,7 @@ function Dashboard({
             </p>
           ) : (
             <div className="mt-3 overflow-x-auto">
-              <table className="w-full min-w-[34rem] text-left text-xs">
+              <table className="w-full min-w-136 text-left text-xs">
                 <thead className="border-y border-line text-ink-3">
                   <tr>
                     <th scope="col" className="w-[62%] px-5 py-2 font-medium">
@@ -354,7 +355,7 @@ function Dashboard({
           </p>
         ) : (
           <div className="mt-3 overflow-x-auto">
-            <table className="w-full min-w-[34rem] text-left text-xs">
+            <table className="w-full min-w-136 text-left text-xs">
               <thead className="border-y border-line text-ink-3">
                 <tr>
                   <th scope="col" className="w-[52%] px-5 py-2 font-medium">
@@ -450,6 +451,13 @@ function Stat({
   );
 }
 
+const SDK_SETUP = `npx expo install @mobile-observability/react-native
+
+Observe.configure({
+  apiKey: process.env.${MOBS_ENV.ingestKey},
+  endpoint: process.env.${MOBS_ENV.endpoint},
+});`;
+
 function Onboarding({ isOwner }: { isOwner: boolean }) {
   if (!isOwner) {
     return (
@@ -481,14 +489,23 @@ function Onboarding({ isOwner }: { isOwner: boolean }) {
           </Step>
           <Step number={2} title="Install the SDK">
             <p>
-              Add the SDK to your Expo or React Native app, then configure it with the ingest key.
+              Add the SDK, copy the project&apos;s{' '}
+              <code className="font-mono text-ink">{MOBS_ENV.endpoint}</code> and{' '}
+              <code className="font-mono text-ink">{MOBS_ENV.ingestKey}</code> from Settings into
+              the app&apos;s <code className="font-mono text-ink">.env</code>, and pass them to the
+              SDK.
             </p>
             <pre className="mt-3 overflow-x-auto rounded-md border border-line bg-night px-3 py-2 font-mono text-2xs text-ink-2">
-              npx expo install @mobile-observability/react-native
+              {SDK_SETUP}
             </pre>
           </Step>
           <Step number={3} title="Upload source maps in CI">
-            <p>Readable stack traces need source maps. Run the CLI after each build or update.</p>
+            <p>
+              Readable stack traces need source maps. Set the secret{' '}
+              <code className="font-mono text-ink">{MOBS_ENV.uploadToken}</code> in CI, then run the
+              CLI after each build or update; it reads the endpoint from the app&apos;s{' '}
+              <code className="font-mono text-ink">.env</code>.
+            </p>
             <pre className="mt-3 overflow-x-auto rounded-md border border-line bg-night px-3 py-2 font-mono text-2xs text-ink-2">
               npx mobs sourcemaps upload-eas --dist dist --eas-json update.json
             </pre>
@@ -519,8 +536,8 @@ function Step({ number, title, children }: { number: number; title: string; chil
 function OverviewSkeleton() {
   return (
     <div aria-hidden="true" className="flex flex-col gap-4 px-5 py-6 sm:px-8">
-      <div className="h-[15.5rem] motion-safe:animate-pulse rounded-[10px] border border-line bg-panel" />
-      <div className="h-[6.5rem] motion-safe:animate-pulse rounded-[10px] border border-line bg-panel" />
+      <div className="h-62 motion-safe:animate-pulse rounded-[10px] border border-line bg-panel" />
+      <div className="h-26 motion-safe:animate-pulse rounded-[10px] border border-line bg-panel" />
       <div className="h-64 motion-safe:animate-pulse rounded-[10px] border border-line bg-panel" />
     </div>
   );

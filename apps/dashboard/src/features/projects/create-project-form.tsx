@@ -4,10 +4,11 @@ import { useActionState } from 'react';
 import { type CreateProjectState, createProjectAction } from '@/app/actions/projects';
 import { FieldError, FormError, inputClass, labelClass, primaryButtonClass } from '@/components/ui';
 import { CopyField } from './copy-field';
+import { appEnv, envLine } from './env-snippet';
 
 const initialState: CreateProjectState = {};
 
-export function CreateProjectForm() {
+export function CreateProjectForm({ origin }: { origin: string }) {
   const [state, action, pending] = useActionState(createProjectAction, initialState);
 
   return (
@@ -39,13 +40,18 @@ export function CreateProjectForm() {
       {state.created && (
         <div className="mt-4 flex flex-col gap-3 rounded-md border border-good/40 bg-good/5 p-4">
           <p className="text-xs font-medium text-ink">
-            {state.created.name} is ready. Configure the SDK with its public ingest key.
+            {state.created.name} is ready. Add these variables to the app.
           </p>
-          <CopyField label="Public ingest key" value={state.created.ingestKey} />
           <CopyField
-            label="Secret upload token"
-            value={state.created.uploadToken}
-            note="Shown once. Store it as a CI secret for source map uploads."
+            label="App .env"
+            value={appEnv(origin, state.created.ingestKey)}
+            multiline
+            note="Pass both to Observe.configure. Safe to ship inside the app."
+          />
+          <CopyField
+            label="Secret upload token (.env.local or CI secret)"
+            value={envLine('uploadToken', state.created.uploadToken)}
+            note="Shown once. Used only by the mobs CLI for source map uploads; never EXPO_PUBLIC_."
           />
         </div>
       )}

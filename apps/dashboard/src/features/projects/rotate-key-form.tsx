@@ -4,6 +4,7 @@ import { useActionState } from 'react';
 import { type RotateKeyState, rotateKeyAction } from '@/app/actions/projects';
 import { secondaryButtonClass } from '@/components/ui';
 import { CopyField } from './copy-field';
+import { envLine } from './env-snippet';
 
 const initialState: RotateKeyState = {};
 
@@ -43,7 +44,7 @@ export function RotateKeyForm({ projectId, kind, label, description }: RotateKey
       {state.key && (
         <CopyField
           label={`New ${kind === 'ingest' ? 'public ingest key' : 'secret upload token'}`}
-          value={state.key}
+          value={envLine(kind === 'ingest' ? 'ingestKey' : 'uploadToken', state.key)}
           note="Shown once. The previous key stopped working."
         />
       )}

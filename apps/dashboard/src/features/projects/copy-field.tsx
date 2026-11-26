@@ -7,10 +7,12 @@ interface CopyFieldProps {
   label: string;
   value: string;
   note?: string;
+  /** Several lines, such as a block of `.env` variables, shown in full. */
+  multiline?: boolean;
 }
 
 /** Read-only value with a copy button; no value is kept after unmount. */
-export function CopyField({ label, value, note }: CopyFieldProps) {
+export function CopyField({ label, value, note, multiline = false }: CopyFieldProps) {
   const [status, setStatus] = useState<'idle' | 'copied' | 'failed'>('idle');
 
   async function copy(): Promise<void> {
@@ -26,12 +28,18 @@ export function CopyField({ label, value, note }: CopyFieldProps) {
     <div className="flex min-w-0 flex-col gap-1.5">
       <span className="text-2xs font-medium text-ink-3">{label}</span>
       <div className="flex min-w-0 items-stretch rounded-md border border-line-strong bg-night">
-        <code
-          className="min-w-0 flex-1 truncate px-3 py-2 font-mono text-2xs text-ink"
-          title={value}
-        >
-          {value}
-        </code>
+        {multiline ? (
+          <pre className="min-w-0 flex-1 overflow-x-auto px-3 py-2 font-mono text-2xs leading-5 text-ink">
+            {value}
+          </pre>
+        ) : (
+          <code
+            className="min-w-0 flex-1 truncate px-3 py-2 font-mono text-2xs text-ink"
+            title={value}
+          >
+            {value}
+          </code>
+        )}
         <button
           type="button"
           onClick={copy}
