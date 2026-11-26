@@ -163,7 +163,7 @@ EXPO_PUBLIC_MOBS_KEY=mobs_pk_...
 MOBS_UPLOAD_TOKEN=mobs_sk_...
 ```
 
-Never give the upload token the `EXPO_PUBLIC_` prefix: Expo inlines `EXPO_PUBLIC_*` values into the JS bundle, where anyone can read them. The ingest key can only send telemetry, so it is fine in the app. The CLI reads the same `.env` files, so the endpoint is configured once for both.
+Never give the upload token the `EXPO_PUBLIC_` prefix: Expo inlines `EXPO_PUBLIC_*` values into the JS bundle, where anyone can read them. The ingest key can only send telemetry, so it is fine in the app. The CLI reads the same `.env` files, so on your machine the endpoint is configured once for both. In CI, set `EXPO_PUBLIC_MOBS_ENDPOINT` next to the `MOBS_UPLOAD_TOKEN` secret: a token from the environment is never sent to an endpoint that only a `.env` file names.
 
 The API, as used by `apps/example`:
 

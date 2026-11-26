@@ -501,10 +501,10 @@ function Onboarding({ isOwner }: { isOwner: boolean }) {
           </Step>
           <Step number={3} title="Upload source maps in CI">
             <p>
-              Readable stack traces need source maps. Set the secret{' '}
-              <code className="font-mono text-ink">{MOBS_ENV.uploadToken}</code> in CI, then run the
-              CLI after each build or update; it reads the endpoint from the app&apos;s{' '}
-              <code className="font-mono text-ink">.env</code>.
+              Readable stack traces need source maps. In CI, set the secret{' '}
+              <code className="font-mono text-ink">{MOBS_ENV.uploadToken}</code> and{' '}
+              <code className="font-mono text-ink">{MOBS_ENV.endpoint}</code>, then run the CLI
+              after each build or update.
             </p>
             <pre className="mt-3 overflow-x-auto rounded-md border border-line bg-night px-3 py-2 font-mono text-2xs text-ink-2">
               npx mobs sourcemaps upload-eas --dist dist --eas-json update.json
