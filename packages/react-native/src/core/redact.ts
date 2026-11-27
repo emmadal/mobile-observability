@@ -53,11 +53,12 @@ export function redactDeep(value: unknown, depth = 0): unknown {
  * both paths redact the same keys.
  */
 /** `"key": value` (JSON-like text). */
-const QUOTED_PAIR = /("((?:[^"\\]|\\.){1,128})"\s*:\s*)("(?:[^"\\]|\\.)*"|[^,}\]\s]+)/g;
+const QUOTED_PAIR =
+  /("((?:[^"\\]|\\.){1,128})"\s*:\s*)("(?:[^"\\]|\\.)*"|"(?:[^"\\]|\\.)*$|[^,}\]\s]+)/g;
 /** `key=value` (form-encoded or query-like text). */
 const FORM_PAIR = /(^|[?&;\s])([\w.[\]-]{1,128})=([^&;\s]*)/g;
-/** `<key>value</key>` (XML). */
-const XML_ELEMENT = /<([A-Za-z_][\w.-]{0,127})(\s[^>]*)?>([^<]*)<\/\1>/g;
+/** `<key>value</key>` (XML), or `<key>value` running to the end of the scanned text. */
+const XML_ELEMENT = /<([A-Za-z_][\w.-]{0,127})(\s[^>]*)?>([^<]*)(?:<\/\1>|$)/g;
 
 function redactText(text: string): string {
   return text
@@ -70,6 +71,8 @@ function redactText(text: string): string {
     .replace(XML_ELEMENT, (match, tag: string, attributes: string | undefined) =>
       isSensitiveKey(tag) ? `<${tag}${attributes ?? ''}>${REDACTED}</${tag}>` : match,
     );
+  // A value cut by the scan limit has no closing quote or tag: the patterns
+  // above then redact it through to the end of the scanned text.
 }
 
 /** Largest body parsed as JSON; longer bodies get the text-level redaction only. */

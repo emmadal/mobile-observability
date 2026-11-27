@@ -84,6 +84,16 @@ describe('sanitizeResponseBody', () => {
     expect(sanitizeResponseBody(long, 40)).toBe('{"userPin":"[redacted]","pad":"xxxxxxxxx');
   });
 
+  it('redacts a sensitive value cut by the scan limit through to the end', () => {
+    const secret = 'hunter2 '.repeat(40);
+    const quoted = sanitizeResponseBody(`error {"token": "${secret}"}`, 30);
+    expect(quoted).toBe('error {"token": "[redacted]"');
+    expect(quoted).not.toContain('hunter2');
+    const xml = sanitizeResponseBody(`<error><password>${secret}</password></error>`, 40);
+    expect(xml).toBe('<error><password>[redacted]</password>');
+    expect(xml).not.toContain('hunter2');
+  });
+
   it('redacts key/value pairs in text that is not valid JSON, then truncates', () => {
     expect(sanitizeResponseBody('error {"token": "abc", "pin":1234, "code": 7}', 2048)).toBe(
       'error {"token": "[redacted]", "pin":"[redacted]", "code": 7}',
