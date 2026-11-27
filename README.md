@@ -239,9 +239,11 @@ Unreleased changes install from GitHub with `npm install --save-dev --install-li
 ```sh
 pnpm check        # biome + tsc + vitest across the workspace
 pnpm test         # unit + integration tests (dashboard tests use a real Postgres)
+pnpm --filter @mobile-observability/dashboard test:e2e   # Playwright against a production build
 ```
 
 - Dashboard integration tests run against `TEST_DATABASE_URL` (default `mobs_test` on port 5433); migrations are applied by the Vitest global setup.
+- Dashboard end-to-end tests (`apps/dashboard/e2e/`, also run in CI) recreate a throwaway `mobs_e2e` database (`E2E_DATABASE_URL`), build and start the dashboard on port 3200, sign in, send SDK-shaped envelopes through the ingest endpoint, then check sign-in and sign-out, users per segment, sessions with phone numbers, network traces and issue resolution, failing on any console or CSP error. Run `pnpm exec playwright install chromium` once first.
 - E2E scenarios for the example app live in `apps/example/e2e/` (Maestro): handled errors, network calls, JS-fatal and native crashes with relaunch.
 - The dashboard targets Next.js 16, whose APIs differ from earlier releases; its documentation ships in `node_modules/next/dist/docs/`.
 
