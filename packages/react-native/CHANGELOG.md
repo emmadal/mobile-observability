@@ -3,6 +3,38 @@
 All notable changes to `@mobile-observability/react-native`. Each section is
 also published as the GitHub release for its `react-native-v<version>` tag.
 
+## 0.3.0
+
+### Added
+
+- **Phone number and segment on the user.** `Observe.setUser({ id, phone,
+  segment })`: `phone` (MSISDN) shows on the dashboard's sessions and users,
+  `segment` groups users (`kyc`, `merchant`...) on the Users page. Both are
+  optional; `phone` is personal data, so set it only when your privacy notice
+  covers it.
+- **Why a request failed.** Requests that got no response now carry the
+  platform's own message (`errorMessage`, e.g. "Unable to resolve host",
+  "The request timed out."). A rejected `fetch` with `AbortSignal.timeout` is
+  reported as `timeout` instead of `network error`.
+- **Error response bodies (opt-in).** With `networkErrorBodiesEnabled: true`,
+  responses with status >= 400 keep the start of their body (2 KB) so the
+  dashboard shows what the API answered. JSON keys that look like
+  credentials (password, token, PIN...) are redacted at every level; the
+  body of a `fetch` is read from a clone, without delaying the app.
+
+### Fixed
+
+- **Sessions linked to the user right after sign-in.** `setUser` re-sends
+  the open session under the new user, so a session that started before the
+  login (or before a persisted login was restored) is no longer anonymous
+  until it goes to the background. Calling `setUser` with an unchanged user
+  sends nothing.
+
+### Changed
+
+- Keys named `pin` (`pin`, `newPin`, `old_pin`, `pinCode`) are treated as
+  sensitive and redacted from event attributes.
+
 ## 0.2.2
 
 ### Changed

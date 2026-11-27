@@ -36,7 +36,7 @@ import type { AppStateStatus, PlatformAdapter } from './platform';
 import { redactSensitive } from './redact';
 import { type CrashContext, convertPendingReport, type JsFatalReport } from './reports';
 
-export const SDK_INFO = { name: '@mobile-observability/react-native', version: '0.2.2' } as const;
+export const SDK_INFO = { name: '@mobile-observability/react-native', version: '0.3.0' } as const;
 
 const DEFAULTS = {
   sampleRate: 1,

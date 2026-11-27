@@ -1,6 +1,6 @@
 {
   "name": "@mobile-observability/protocol",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Wire protocol (envelope schema, metric names, URL sanitizing) shared by the SDK and the ingest server.",
   "keywords": [
     "mobile-observability",
