@@ -46,17 +46,40 @@ export function redactDeep(value: unknown, depth = 0): unknown {
   return result;
 }
 
-/** `"token": "abc"` style pairs in text that could not be parsed as JSON. */
-const SENSITIVE_PAIR =
-  /("(?:[^"]*(?:pass(?:word)?|pwd|secret|token|otp|authorization|bearer|api[-_]?key|credential|card|cvv|cvc|ssn)[^"]*|(?:[^"]*[-_])?pin(?:code)?)"\s*:\s*)("(?:[^"\\]|\\.)*"|[^,}\s]+)/gi;
+/*
+ * Key/value shapes found in bodies that are not parseable JSON (HTML error
+ * pages, form-encoded or XML bodies, JSON too long or cut short). Every key
+ * found is tested with isSensitiveKey, the same test the JSON path uses, so
+ * both paths redact the same keys.
+ */
+/** `"key": value` (JSON-like text). */
+const QUOTED_PAIR = /("((?:[^"\\]|\\.){1,128})"\s*:\s*)("(?:[^"\\]|\\.)*"|[^,}\]\s]+)/g;
+/** `key=value` (form-encoded or query-like text). */
+const FORM_PAIR = /(^|[?&;\s])([\w.[\]-]{1,128})=([^&;\s]*)/g;
+/** `<key>value</key>` (XML). */
+const XML_ELEMENT = /<([A-Za-z_][\w.-]{0,127})(\s[^>]*)?>([^<]*)<\/\1>/g;
+
+function redactText(text: string): string {
+  return text
+    .replace(QUOTED_PAIR, (match, prefix: string, key: string) =>
+      isSensitiveKey(key) ? `${prefix}"${REDACTED}"` : match,
+    )
+    .replace(FORM_PAIR, (match, lead: string, key: string) =>
+      isSensitiveKey(key) ? `${lead}${key}=${REDACTED}` : match,
+    )
+    .replace(XML_ELEMENT, (match, tag: string, attributes: string | undefined) =>
+      isSensitiveKey(tag) ? `<${tag}${attributes ?? ''}>${REDACTED}</${tag}>` : match,
+    );
+}
 
 /** Largest body parsed as JSON; longer bodies get the text-level redaction only. */
 const MAX_PARSED_BODY = 64 * 1024;
 
 /**
  * Error response body as sent to the server: JSON is re-serialized with
- * sensitive keys redacted, other text has `"key": value` pairs redacted, and
- * the result is cut to `maxLength`. Undefined for an empty body.
+ * sensitive keys redacted at every level; other text has its JSON-like,
+ * form-encoded and XML key/value pairs redacted with the same key test. The
+ * result is cut to `maxLength`. Undefined for an empty body.
  */
 export function sanitizeResponseBody(text: string, maxLength: number): string | undefined {
   const trimmed = text.trim();
@@ -68,5 +91,6 @@ export function sanitizeResponseBody(text: string, maxLength: number): string | 
       // Not JSON after all: fall through to the text redaction.
     }
   }
-  return trimmed.replace(SENSITIVE_PAIR, `$1"${REDACTED}"`).slice(0, maxLength);
+  // Only the kept prefix (with room for a value cut at the edge) is scanned.
+  return redactText(trimmed.slice(0, maxLength * 2)).slice(0, maxLength);
 }

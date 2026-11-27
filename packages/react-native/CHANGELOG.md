@@ -18,9 +18,11 @@ also published as the GitHub release for its `react-native-v<version>` tag.
   reported as `timeout` instead of `network error`.
 - **Error response bodies (opt-in).** With `networkErrorBodiesEnabled: true`,
   responses with status >= 400 keep the start of their body (2 KB) so the
-  dashboard shows what the API answered. JSON keys that look like
-  credentials (password, token, PIN...) are redacted at every level; the
-  body of a `fetch` is read from a clone, without delaying the app.
+  dashboard shows what the API answered. Keys that look like credentials
+  (password, token, PIN...) are redacted at every level of JSON bodies, and
+  in the JSON-like, form-encoded and XML pairs of other bodies, with the same
+  key test; the body of a `fetch` is read from a clone, without delaying the
+  app.
 
 ### Fixed
 

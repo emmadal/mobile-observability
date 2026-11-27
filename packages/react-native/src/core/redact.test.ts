@@ -64,6 +64,26 @@ describe('sanitizeResponseBody', () => {
     );
   });
 
+  it('redacts the same keys in text as in JSON (camelCase, form, XML)', () => {
+    expect(
+      sanitizeResponseBody('error: {"newPin": "1234", "userId": 7, "oneTimeCode": "99"', 2048),
+    ).toBe('error: {"newPin": "[redacted]", "userId": 7, "oneTimeCode": "[redacted]"');
+    expect(sanitizeResponseBody('pin=1234&msisdn=231770000001&access_token=abc', 2048)).toBe(
+      'pin=[redacted]&msisdn=231770000001&access_token=[redacted]',
+    );
+    expect(
+      sanitizeResponseBody(
+        '<error><message>Denied</message><Password>x</Password><apiKey a="1">k</apiKey></error>',
+        2048,
+      ),
+    ).toBe(
+      '<error><message>Denied</message><Password>[redacted]</Password><apiKey a="1">[redacted]</apiKey></error>',
+    );
+    // A JSON body too long to parse still has its keys redacted as text.
+    const long = `{"userPin":"4321","pad":"${'x'.repeat(70_000)}"}`;
+    expect(sanitizeResponseBody(long, 40)).toBe('{"userPin":"[redacted]","pad":"xxxxxxxxx');
+  });
+
   it('redacts key/value pairs in text that is not valid JSON, then truncates', () => {
     expect(sanitizeResponseBody('error {"token": "abc", "pin":1234, "code": 7}', 2048)).toBe(
       'error {"token": "[redacted]", "pin":"[redacted]", "code": 7}',
