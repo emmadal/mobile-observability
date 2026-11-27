@@ -4,6 +4,7 @@ import type {
   LogEventOptions,
   MarkInteractiveOptions,
   ObserveConfig,
+  ObserveUser,
 } from './types';
 
 export { ObserveErrorBoundary, type ObserveErrorBoundaryProps } from './react/ObserveErrorBoundary';
@@ -23,6 +24,7 @@ export type {
   NavigationIntegrationOptions,
   ObserveConfig,
   ObserveIntegrations,
+  ObserveUser,
 } from './types';
 
 /** Imperative API, mirroring `Observe` from expo-observe plus crash-reporting additions. */
@@ -51,8 +53,11 @@ export const Observe = {
   dispatchEvents(): Promise<void> {
     return getClient().flush();
   },
-  /** Attaches a user id (no other PII) to subsequent events; null clears it. */
-  setUser(user: { id: string } | null): void {
+  /**
+   * Identifies the signed-in user on the current session and everything after
+   * it; null clears it (sign-out). `phone` and `segment` are optional.
+   */
+  setUser(user: ObserveUser | null): void {
     getClient().setUser(user);
   },
   /** Current session id, if the SDK is dispatching. */

@@ -47,6 +47,14 @@ export interface ObserveConfig {
   resourceSampleIntervalMs?: number;
   /** Record fetch/XHR requests (default true). */
   networkTrackingEnabled?: boolean;
+  /**
+   * Keep the start of the body of error responses (status >= 400, up to 2 KB)
+   * so the dashboard shows what the API answered (default false). JSON keys
+   * that look like credentials are redacted; anything else in the body is sent,
+   * so only enable it for APIs whose error bodies hold no personal data you
+   * cannot store.
+   */
+  networkErrorBodiesEnabled?: boolean;
   /** Request URLs to ignore: substring or RegExp. */
   ignoreUrls?: (string | RegExp)[];
   /** A new session starts after this long in background (default 30 s). */
@@ -55,6 +63,19 @@ export interface ObserveConfig {
   beforeSend?: (event: ErrorEvent) => ErrorEvent | null;
   /** Flush interval in ms (default 10 s). */
   flushIntervalMs?: number;
+}
+
+/** The signed-in user, attached to every session, error, event and request. */
+export interface ObserveUser {
+  /** The app's own stable identifier, e.g. an internal account id. */
+  id: string;
+  /**
+   * Phone number (MSISDN), shown on the dashboard's sessions and users. Personal
+   * data: set it only when your privacy notice covers sending it.
+   */
+  phone?: string;
+  /** Group the user belongs to, e.g. a product line or role ("kyc", "merchant"). */
+  segment?: string;
 }
 
 export interface MarkInteractiveOptions {

@@ -1,5 +1,6 @@
-import { sanitizeUrl } from '@mobile-observability/protocol';
+import { LIMITS, sanitizeUrl } from '@mobile-observability/protocol';
 import { traceId, traceparent } from '../core/ids';
+import { sanitizeResponseBody } from '../core/redact';
 
 export interface CompletedRequest {
   method: string;
@@ -11,7 +12,12 @@ export interface CompletedRequest {
   bytesReceived?: number;
   bytesSent?: number;
   timeToFirstByteMs?: number;
+  /** Failure kind when no response arrived: network error, timeout, aborted. */
   error?: string;
+  /** The platform's or the JS error's own message for that failure. */
+  errorMessage?: string;
+  /** Redacted start of an error response body (opt-in). */
+  responseBody?: string;
   /** W3C trace id propagated to the backend in the `traceparent` header. */
   traceId?: string;
 }
@@ -46,17 +52,24 @@ interface TrackedXhr extends XMLHttpRequest {
 }
 
 const RING_SIZE = 200;
+const MAX_ERROR_MESSAGE = 512;
+/** An error body still streaming after this long is recorded without it. */
+const BODY_READ_TIMEOUT_MS = 2_000;
+const TEXT_CONTENT_TYPE = /json|text|xml|html|x-www-form-urlencoded/i;
 
 export interface NetworkTrackerOptions {
   now: () => number;
   shouldIgnore: (url: string) => boolean;
   onRequest: (request: CompletedRequest) => void;
+  /** Keep the redacted start of error response bodies (status >= 400). */
+  captureErrorBodies?: boolean;
 }
 
 /**
  * Patches XMLHttpRequest (React Native's fetch is built on it) to record
- * method, sanitized URL, status, duration and sizes (AC-5). Bodies and headers
- * are never read.
+ * method, sanitized URL, status, duration and sizes (AC-5). Request bodies and
+ * headers are never read; a failed request keeps its failure message, and an
+ * error response its redacted body only when `captureErrorBodies` is on.
  */
 export class NetworkTracker {
   private readonly recent: CompletedRequest[] = [];
@@ -142,37 +155,48 @@ export class NetworkTracker {
       const headers = new Headers(init?.headers);
       headers.set('traceparent', traceparent(id));
       const trackedInit = { ...init, headers };
+      let response: Response;
       try {
-        const response = await original(input, trackedInit);
-        const length = Number(response.headers?.get?.('content-length') ?? Number.NaN);
-        const now = tracker.options.now();
-        tracker.record({
-          ...sanitizeUrl(url),
-          method,
-          statusCode: response.status,
-          startedAt,
-          // fetch resolves when headers arrive: this is time to first byte.
-          durationMs: Math.max(0, now - startedAt),
-          timeToFirstByteMs: Math.max(0, now - startedAt),
-          ...(Number.isFinite(length) ? { bytesReceived: length } : {}),
-          ...(bytesSent !== undefined ? { bytesSent } : {}),
-          traceId: id,
-        });
-        return response;
+        response = await original(input, trackedInit);
       } catch (error) {
-        const aborted = (error as { name?: string })?.name === 'AbortError';
+        const message = errorMessageOf(error);
         tracker.record({
           ...sanitizeUrl(url),
           method,
           statusCode: 0,
           startedAt,
           durationMs: Math.max(0, tracker.options.now() - startedAt),
-          error: aborted ? 'aborted' : 'network error',
+          error: fetchFailureKind(error),
+          ...(message ? { errorMessage: message } : {}),
           ...(bytesSent !== undefined ? { bytesSent } : {}),
           traceId: id,
         });
         throw error;
       }
+      const length = Number(response.headers?.get?.('content-length') ?? Number.NaN);
+      const now = tracker.options.now();
+      const request: CompletedRequest = {
+        ...sanitizeUrl(url),
+        method,
+        statusCode: response.status,
+        startedAt,
+        // fetch resolves when headers arrive: this is time to first byte.
+        durationMs: Math.max(0, now - startedAt),
+        timeToFirstByteMs: Math.max(0, now - startedAt),
+        ...(Number.isFinite(length) ? { bytesReceived: length } : {}),
+        ...(bytesSent !== undefined ? { bytesSent } : {}),
+        traceId: id,
+      };
+      if (tracker.options.captureErrorBodies && response.status >= 400) {
+        // The clone is taken before the app sees the response; the app is not
+        // kept waiting while the error body is read.
+        void readFetchBody(response).then((body) =>
+          tracker.record(body ? { ...request, responseBody: body } : request),
+        );
+      } else {
+        tracker.record(request);
+      }
+      return response;
     };
     target.fetch = wrapped as typeof fetch;
     this.restoreFetch = () => {
@@ -228,6 +252,9 @@ export class NetworkTracker {
     const now = this.options.now();
     const { host, path } = sanitizeUrl(state.url);
     const statusCode = state.error ? 0 : xhr.status;
+    const errorMessage = state.error ? readXhrFailure(xhr) : undefined;
+    const responseBody =
+      this.options.captureErrorBodies && statusCode >= 400 ? readXhrBody(xhr) : undefined;
     const request: CompletedRequest = {
       method: state.method.toUpperCase(),
       host,
@@ -241,6 +268,8 @@ export class NetworkTracker {
         ? { timeToFirstByteMs: state.firstByteAt - state.startedAt }
         : {}),
       ...(state.error ? { error: state.error } : {}),
+      ...(errorMessage ? { errorMessage } : {}),
+      ...(responseBody ? { responseBody } : {}),
       ...(state.traceId ? { traceId: state.traceId } : {}),
     };
     this.record(request);
@@ -270,6 +299,90 @@ function responseSize(xhr: XMLHttpRequest): number | undefined {
     // Some response types throw on access; size is optional.
   }
   return undefined;
+}
+
+/** Timeout, abort or plain network failure of a rejected fetch. */
+function fetchFailureKind(error: unknown): string {
+  const name = (error as { name?: unknown } | null)?.name;
+  if (name === 'TimeoutError') return 'timeout';
+  if (name === 'AbortError') return 'aborted';
+  return 'network error';
+}
+
+/** "TypeError: Network request failed", cut to the protocol limit. */
+function errorMessageOf(error: unknown): string | undefined {
+  if (error === null || error === undefined) return undefined;
+  const { name, message } = error as { name?: unknown; message?: unknown };
+  const text =
+    typeof message === 'string' && message
+      ? typeof name === 'string' && name && name !== 'Error'
+        ? `${name}: ${message}`
+        : message
+      : typeof error === 'string'
+        ? error
+        : undefined;
+  return text?.trim().slice(0, MAX_ERROR_MESSAGE) || undefined;
+}
+
+/**
+ * React Native puts the native failure message ("The request timed out.",
+ * "Unable to resolve host ...") in `responseText` of a failed text request.
+ */
+function readXhrFailure(xhr: XMLHttpRequest): string | undefined {
+  try {
+    if (xhr.responseType !== '' && xhr.responseType !== 'text') return undefined;
+    const text = xhr.responseText;
+    return typeof text === 'string'
+      ? text.trim().slice(0, MAX_ERROR_MESSAGE) || undefined
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function isTextContent(contentType: string | null | undefined): boolean {
+  return !contentType || TEXT_CONTENT_TYPE.test(contentType);
+}
+
+/** Error body of a finished XHR when it is text or parsed JSON; blobs are skipped. */
+function readXhrBody(xhr: XMLHttpRequest): string | undefined {
+  try {
+    if (!isTextContent(xhr.getResponseHeader('content-type'))) return undefined;
+    if (xhr.responseType === '' || xhr.responseType === 'text') {
+      const text = xhr.responseText;
+      return typeof text === 'string'
+        ? sanitizeResponseBody(text, LIMITS.maxResponseBodyLength)
+        : undefined;
+    }
+    if (xhr.responseType === 'json' && xhr.response !== null && xhr.response !== undefined) {
+      return sanitizeResponseBody(JSON.stringify(xhr.response), LIMITS.maxResponseBodyLength);
+    }
+  } catch {
+    // Some response types throw on access; the body is optional.
+  }
+  return undefined;
+}
+
+/** Reads a clone of an error response; undefined when not text, unreadable or too slow. */
+function readFetchBody(response: Response): Promise<string | undefined> {
+  let clone: Response;
+  try {
+    if (!isTextContent(response.headers?.get?.('content-type'))) {
+      return Promise.resolve(undefined);
+    }
+    clone = response.clone();
+  } catch {
+    return Promise.resolve(undefined);
+  }
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<undefined>((resolve) => {
+    timer = setTimeout(() => resolve(undefined), BODY_READ_TIMEOUT_MS);
+  });
+  const read = clone
+    .text()
+    .then((text) => sanitizeResponseBody(text, LIMITS.maxResponseBodyLength))
+    .catch(() => undefined);
+  return Promise.race([read, timeout]).finally(() => clearTimeout(timer));
 }
 
 export function isFailure(statusCode: number): boolean {

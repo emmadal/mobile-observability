@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { type CompletedRequest, NetworkTracker } from './network-tracker';
 
 type Listener = () => void;
@@ -9,6 +9,8 @@ class FakeXhr {
   status = 0;
   readyState = 0;
   response: unknown = null;
+  responseType: XMLHttpRequestResponseType = '';
+  responseText = '';
   requestHeaders: Record<string, string> = {};
   private readonly listeners = new Map<string, Listener[]>();
   private headers: Record<string, string> = {};
@@ -29,27 +31,32 @@ class FakeXhr {
   private emit(type: string) {
     for (const listener of this.listeners.get(type) ?? []) listener();
   }
-  respond(status: number, headers: Record<string, string> = {}) {
+  respond(status: number, headers: Record<string, string> = {}, body = '') {
     this.status = status;
     this.headers = headers;
+    this.responseText = body;
+    this.response = this.responseType === 'json' && body ? JSON.parse(body) : body;
     this.readyState = 2;
     this.emit('readystatechange');
     this.readyState = 4;
     this.emit('loadend');
   }
-  fail(kind: 'error' | 'timeout' | 'abort') {
+  fail(kind: 'error' | 'timeout' | 'abort', nativeMessage = '') {
+    // React Native stores the native failure message as the text response.
+    this.responseText = nativeMessage;
     this.emit(kind);
     this.emit('loadend');
   }
 }
 
-function setup(ignore: (url: string) => boolean = () => false) {
+function setup(ignore: (url: string) => boolean = () => false, captureErrorBodies = false) {
   const clock = { now: 1_000 };
   const requests: CompletedRequest[] = [];
   const tracker = new NetworkTracker({
     now: () => clock.now,
     shouldIgnore: ignore,
     onRequest: (r) => requests.push(r),
+    captureErrorBodies,
   });
   const Xhr = class extends FakeXhr {};
   tracker.install(Xhr as unknown as typeof XMLHttpRequest);
@@ -101,6 +108,66 @@ describe('NetworkTracker (AC-5)', () => {
     expect(requests[0]).toMatchObject({ statusCode: 0, error: 'timeout', method: 'POST' });
   });
 
+  it('keeps the native failure message of a failed request', () => {
+    const { requests, request } = setup();
+    request('GET', 'https://api.example.com/a').fail(
+      'error',
+      'Unable to resolve host "api.example.com"',
+    );
+    request('GET', 'https://api.example.com/b').fail('timeout', 'The request timed out.');
+    expect(requests[0]).toMatchObject({
+      statusCode: 0,
+      error: 'network error',
+      errorMessage: 'Unable to resolve host "api.example.com"',
+    });
+    expect(requests[1]).toMatchObject({ error: 'timeout', errorMessage: 'The request timed out.' });
+  });
+
+  it('never reads response bodies unless error bodies are enabled', () => {
+    const { requests, request } = setup();
+    request('POST', 'https://api.example.com/login').respond(
+      401,
+      { 'content-type': 'application/json' },
+      '{"message":"Invalid PIN"}',
+    );
+    expect(requests[0]?.statusCode).toBe(401);
+    expect(requests[0]).not.toHaveProperty('responseBody');
+  });
+
+  it('keeps the redacted body of error responses when enabled, never of successes', () => {
+    const { requests, request } = setup(() => false, true);
+    request('POST', 'https://api.example.com/login').respond(
+      401,
+      { 'content-type': 'application/json' },
+      '{"message":"Invalid PIN","pin":"1234","data":{"access_token":"abc"}}',
+    );
+    request('GET', 'https://api.example.com/ok').respond(200, {}, '{"name":"secret profile"}');
+    request('GET', 'https://api.example.com/gateway').respond(
+      502,
+      { 'content-type': 'text/html' },
+      '<html><body>502 Bad Gateway</body></html>',
+    );
+    request('GET', 'https://api.example.com/file').respond(
+      500,
+      { 'content-type': 'image/png' },
+      'PNG',
+    );
+    expect(requests[0]?.responseBody).toBe(
+      '{"message":"Invalid PIN","pin":"[redacted]","data":{"access_token":"[redacted]"}}',
+    );
+    expect(requests[1]).not.toHaveProperty('responseBody');
+    expect(requests[2]?.responseBody).toBe('<html><body>502 Bad Gateway</body></html>');
+    expect(requests[3]).not.toHaveProperty('responseBody');
+  });
+
+  it('serializes JSON-typed XHR error responses', () => {
+    const { requests, request } = setup(() => false, true);
+    const xhr = request('GET', 'https://api.example.com/x');
+    xhr.responseType = 'json';
+    xhr.respond(422, {}, '{"errors":{"msisdn":"invalid"}}');
+    expect(requests[0]?.responseBody).toBe('{"errors":{"msisdn":"invalid"}}');
+  });
+
   it('ignores URLs the predicate excludes (own endpoint, ignoreUrls)', () => {
     const { requests, request } = setup((url) => url.startsWith('https://obs.example.com/api/v1/'));
     request('POST', 'https://obs.example.com/api/v1/envelope').respond(202);
@@ -129,13 +196,14 @@ describe('NetworkTracker (AC-5)', () => {
 });
 
 describe('NetworkTracker fetch wrapping', () => {
-  function setupFetch(impl: typeof fetch) {
+  function setupFetch(impl: typeof fetch, captureErrorBodies = false) {
     const clock = { now: 1_000 };
     const requests: CompletedRequest[] = [];
     const tracker = new NetworkTracker({
       now: () => clock.now,
       shouldIgnore: (url) => url.includes('/api/v1/'),
       onRequest: (request) => requests.push(request),
+      captureErrorBodies,
     });
     const target: { fetch?: typeof fetch } = { fetch: impl };
     tracker.installFetch(target);
@@ -169,7 +237,67 @@ describe('NetworkTracker fetch wrapping', () => {
     await expect(target.fetch?.('https://down.example.com/')).rejects.toThrow(
       'Network request failed',
     );
-    expect(requests[0]).toMatchObject({ statusCode: 0, error: 'network error' });
+    expect(requests[0]).toMatchObject({
+      statusCode: 0,
+      error: 'network error',
+      errorMessage: 'TypeError: Network request failed',
+    });
+  });
+
+  it('classifies AbortSignal.timeout and manual aborts', async () => {
+    const timeout = new DOMException('The operation timed out.', 'TimeoutError');
+    const { requests, target } = setupFetch(async () => {
+      throw timeout;
+    });
+    await expect(target.fetch?.('https://slow.example.com/')).rejects.toBe(timeout);
+    expect(requests[0]).toMatchObject({
+      error: 'timeout',
+      errorMessage: 'TimeoutError: The operation timed out.',
+    });
+
+    const abort = new DOMException('Aborted', 'AbortError');
+    const aborted = setupFetch(async () => {
+      throw abort;
+    });
+    await expect(aborted.target.fetch?.('https://slow.example.com/')).rejects.toBe(abort);
+    expect(aborted.requests[0]).toMatchObject({ error: 'aborted' });
+  });
+
+  it('reads a clone of fetch error bodies without consuming the app response', async () => {
+    const { requests, target } = setupFetch(
+      async () =>
+        new Response('{"message":"Agent not found","token":"t"}', {
+          status: 404,
+          headers: { 'content-type': 'application/json' },
+        }),
+      true,
+    );
+    const response = await target.fetch?.('https://api.example.com/agents/7');
+    expect(await response?.json()).toEqual({ message: 'Agent not found', token: 't' });
+    await vi.waitFor(() => expect(requests).toHaveLength(1));
+    expect(requests[0]).toMatchObject({
+      statusCode: 404,
+      responseBody: '{"message":"Agent not found","token":"[redacted]"}',
+    });
+  });
+
+  it('records a slow error body without it after the read timeout', async () => {
+    vi.useFakeTimers();
+    try {
+      const stalled = new ReadableStream<Uint8Array>({ start() {} });
+      const { requests, target } = setupFetch(
+        async () => new Response(stalled, { status: 503 }),
+        true,
+      );
+      await target.fetch?.('https://api.example.com/stream');
+      expect(requests).toHaveLength(0);
+      await vi.advanceTimersByTimeAsync(2_000);
+      expect(requests).toHaveLength(1);
+      expect(requests[0]).toMatchObject({ statusCode: 503 });
+      expect(requests[0]).not.toHaveProperty('responseBody');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('skips ignored URLs and the XHR-based polyfill', async () => {

@@ -26,6 +26,7 @@ import type {
   MarkInteractiveOptions,
   NavigationIntegrationOptions,
   ObserveConfig,
+  ObserveUser,
 } from '../types';
 import { BreadcrumbBuffer } from './breadcrumbs';
 import { DEFAULT_HANG_THRESHOLD_MS, HangWatchdog } from './hang-watchdog';
@@ -46,6 +47,7 @@ const DEFAULTS = {
   hangThresholdMs: DEFAULT_HANG_THRESHOLD_MS,
   resourceSampleIntervalMs: 300_000,
   networkTrackingEnabled: true,
+  networkErrorBodiesEnabled: false,
   sessionTimeoutMs: 30_000,
   flushIntervalMs: 10_000,
   flushAtItems: 50,
@@ -72,7 +74,7 @@ export class ObservabilityClient {
   private navigation: NavigationTracker | null = null;
   private hangWatchdog: HangWatchdog | null = null;
   private appStateStatus: AppStateStatus = 'active';
-  private user: { id: string } | undefined;
+  private user: ObserveUser | undefined;
   private flushTimer: ReturnType<typeof setInterval> | null = null;
   private crashContextTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly cleanups: (() => void)[] = [];
@@ -190,7 +192,11 @@ export class ObservabilityClient {
       );
     }
     if (config.networkTrackingEnabled)
-      this.installNetworkTracking(config.endpoint, config.ignoreUrls ?? []);
+      this.installNetworkTracking(
+        config.endpoint,
+        config.ignoreUrls ?? [],
+        config.networkErrorBodiesEnabled,
+      );
 
     this.cleanups.push(this.platform.appState.subscribe((state) => this.onAppStateChange(state)));
     if (config.hangTrackingEnabled) this.installHangWatchdog(config.hangThresholdMs);
@@ -483,7 +489,11 @@ export class ObservabilityClient {
     });
   }
 
-  private installNetworkTracking(endpoint: string, ignoreUrls: (string | RegExp)[]): void {
+  private installNetworkTracking(
+    endpoint: string,
+    ignoreUrls: (string | RegExp)[],
+    captureErrorBodies: boolean,
+  ): void {
     const ingestBase = endpoint.replace(/\/+$/, '');
     const ownPaths = Object.values(INGEST_PATHS).map((path) => `${ingestBase}${path}`);
     this.network = new NetworkTracker({
@@ -494,6 +504,7 @@ export class ObservabilityClient {
           typeof pattern === 'string' ? url.includes(pattern) : pattern.test(url),
         ),
       onRequest: (request) => this.onRequest(request),
+      captureErrorBodies,
     });
     this.network.install(this.platform.XMLHttpRequest);
     if (this.platform.fetchTarget) this.network.installFetch(this.platform.fetchTarget);
@@ -518,6 +529,8 @@ export class ObservabilityClient {
         : {}),
       ...(request.traceId ? { traceId: request.traceId } : {}),
       ...(request.error ? { error: request.error } : {}),
+      ...(request.errorMessage ? { errorMessage: request.errorMessage } : {}),
+      ...(request.responseBody ? { responseBody: request.responseBody } : {}),
       ...(route ? { routeName: route.routeName } : {}),
       ...(this.platform.native.isAvailable
         ? safeCall(() => {
@@ -668,14 +681,20 @@ export class ObservabilityClient {
 
   // MARK: User
 
-  setUser(user: { id: string } | null): void {
-    this.user = user ?? undefined;
+  setUser(user: ObserveUser | null): void {
+    const next = normalizeUser(user);
+    if (sameUser(this.user, next)) return;
+    this.user = next;
     if (this.context) {
       this.context = { ...this.context };
       if (this.user) this.context.user = this.user;
       else delete this.context.user;
       this.syncCrashContext(true);
     }
+    // Sign-in usually happens after the session started (login screen, or a
+    // persisted login restored asynchronously): re-send the session under the
+    // new context so it is linked to the user now, not when it backgrounds.
+    if (this.user) this.sessions?.touch();
   }
 
   // MARK: Queue and dispatch
@@ -737,6 +756,19 @@ function addDeviceParams(params: JsonObject, state: DeviceStateSnapshot): void {
     const value = state[source];
     if (value !== undefined) params[target] = value;
   }
+}
+
+/** Trims the fields and drops empty optional ones; undefined for a missing or blank id. */
+function normalizeUser(user: ObserveUser | null | undefined): ObserveUser | undefined {
+  const id = typeof user?.id === 'string' ? user.id.trim() : '';
+  if (!user || !id) return undefined;
+  const phone = typeof user.phone === 'string' ? user.phone.trim() : '';
+  const segment = typeof user.segment === 'string' ? user.segment.trim() : '';
+  return { id, ...(phone ? { phone } : {}), ...(segment ? { segment } : {}) };
+}
+
+function sameUser(a: ObserveUser | undefined, b: ObserveUser | undefined): boolean {
+  return a?.id === b?.id && a?.phone === b?.phone && a?.segment === b?.segment;
 }
 
 function safeCall<T>(call: () => T, fallback: T): T {
