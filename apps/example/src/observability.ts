@@ -10,5 +10,7 @@ Observe.configure({
   apiKey: process.env.EXPO_PUBLIC_MOBS_KEY ?? '',
   dispatchInDebug: true,
   environment: process.env.EXPO_PUBLIC_MOBS_ENVIRONMENT ?? 'development',
+  // Keep what the API answered on 4xx/5xx (credential-like keys are redacted).
+  networkErrorBodiesEnabled: true,
   integrations: { 'expo-router': { filteredParams: ['token'] } },
 });

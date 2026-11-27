@@ -60,16 +60,47 @@ export default ObserveRoot.wrap(RootLayout);
 
 Call `Observe.configure()` at module scope: once the root has mounted it throws. The same options can live in `app.json` under `expo.extra.observability`.
 
-Useful options: `sampleRate` (0 to 1, decided once per installation), `environment`, `beforeSend` (edit or drop an error), `ignoreUrls`, `sessionTimeoutMs`, `dispatchInDebug` (debug builds send nothing unless `true`), `enabled`. Collection toggles: `errorHandlingEnabled`, `networkTrackingEnabled`, `hangTrackingEnabled` (with `hangThresholdMs`, default 2000) and `resourceSampleIntervalMs` (default 300000, `0` disables).
+Useful options: `sampleRate` (0 to 1, decided once per installation), `environment`, `beforeSend` (edit or drop an error), `ignoreUrls`, `sessionTimeoutMs`, `dispatchInDebug` (debug builds send nothing unless `true`), `enabled`. Collection toggles: `errorHandlingEnabled`, `networkTrackingEnabled`, `networkErrorBodiesEnabled` (default `false`, see [Network errors](#network-errors)), `hangTrackingEnabled` (with `hangThresholdMs`, default 2000) and `resourceSampleIntervalMs` (default 300000, `0` disables).
 
 ## What it records
 
 - **Crashes and errors**: uncaught JS errors, unhandled promise rejections, native crashes (signals, `NSException`, JVM exceptions), ANR-like **JS thread hangs** over two seconds, and out-of-memory reports. A crash report is sent on the next launch.
 - **Sessions**: lifecycle-tracked sessions with ok, errored, abnormal and crashed status.
 - **Performance**: cold and warm launch, bundle load, time to first render and time to interactive, plus slow/frozen frame counters and device state (battery, thermal, low power mode) sampled every five minutes as `$device.health` events.
-- **Network**: `XMLHttpRequest` and the native `fetch` (expo/fetch), with status, timing, sizes, **time to first byte** and the **connection type** (wifi, cellular…). Query strings are stripped and paths are templated (`/items/:id`). Every request gets a fresh **W3C trace id** injected as a `traceparent` header, so mobile requests join their backend traces.
+- **Network**: `XMLHttpRequest` and the native `fetch` (expo/fetch), with status, timing, sizes, **time to first byte** and the **connection type** (wifi, cellular…). Query strings are stripped and paths are templated (`/items/:id`). Every request gets a fresh **W3C trace id** injected as a `traceparent` header, so mobile requests join their backend traces. A request that got no response keeps its failure kind (network error, timeout, aborted) and the platform's message; an error response can keep its body (opt-in).
 - **Events**: `Observe.logEvent(name, { attributes, body, severity, displayName })`.
 - **Offline**: connectivity transitions are recorded as `$net.offline` / `$net.online` events, and envelopes queue while offline.
+
+## Identify users
+
+Call `Observe.setUser` once the user is known (sign-in, or a persisted login restored), and with `null` on sign-out:
+
+```ts
+Observe.setUser({
+  id: `kyc:${agent.id}`, // your own stable id
+  phone: agent.msisdn, // optional: shown on sessions and users
+  segment: 'kyc', // optional: groups users on the Users page
+});
+```
+
+The open session is linked to the user right away, then every later session, error, event and request. On the dashboard, **Sessions** shows each session's phone number and segment, and **Users** counts users per segment (kyc, kya, merchant…) with a filter. Without `segment`, an id shaped `segment:rest` (`kyc:42`) gives its segment. `phone` is personal data: send it only when your privacy notice covers it.
+
+## Network errors
+
+Each captured request tells a network failure from an API error:
+
+- **No response** (offline, DNS or TLS failure, dropped connection, timeout, abort): status `0`, the failure kind and the platform's own message, such as `Unable to resolve host "api.example.com"` or `The request timed out.`.
+- **API error** (status ≥ 400): the status code, and with `networkErrorBodiesEnabled: true` the first 2 KB of the response body, so the dashboard shows what the API answered:
+
+```ts
+Observe.configure({
+  apiKey: process.env.EXPO_PUBLIC_MOBS_KEY,
+  endpoint: process.env.EXPO_PUBLIC_MOBS_ENDPOINT,
+  networkErrorBodiesEnabled: true,
+});
+```
+
+Bodies of successful responses and all request bodies are never read. In error bodies, JSON keys that look like credentials (`password`, `token`, `pin`, `apiKey`…) are redacted at every level before leaving the device; the rest is sent as is, so only enable it for APIs whose error bodies hold nothing you cannot store. `fetch` bodies are read from a clone, so the app gets its response without waiting.
 
 ## Screens and navigation
 
@@ -87,16 +118,16 @@ import { ObserveNavigationContainer } from '@mobile-observability/react-native/i
 
 ## API
 
-| Call                                                | What it does                                      |
-| --------------------------------------------------- | ------------------------------------------------- |
-| `Observe.configure(config)`                         | Sets the endpoint, key and options (module scope) |
-| `Observe.reportError(error, { tags })`              | Reports a handled error, returns its event id     |
-| `Observe.logEvent(name, options)`                   | Records a custom event                            |
-| `Observe.setUser({ id })` / `Observe.setUser(null)` | Attaches a user id (no other personal data)       |
-| `Observe.markInteractive()`                         | App-level time to interactive, outside screens    |
-| `Observe.dispatchEvents()`                          | Sends everything queued now                       |
-| `ObserveRoot.wrap(Component)`                       | Records time to first render                      |
-| `<ObserveErrorBoundary fallback onError>`           | Reports render errors and shows a fallback        |
+| Call                                                                  | What it does                                      |
+| --------------------------------------------------------------------- | ------------------------------------------------- |
+| `Observe.configure(config)`                                           | Sets the endpoint, key and options (module scope) |
+| `Observe.reportError(error, { tags })`                                | Reports a handled error, returns its event id     |
+| `Observe.logEvent(name, options)`                                     | Records a custom event                            |
+| `Observe.setUser({ id, phone?, segment? })` / `Observe.setUser(null)` | Identifies the signed-in user, or clears it       |
+| `Observe.markInteractive()`                                           | App-level time to interactive, outside screens    |
+| `Observe.dispatchEvents()`                                            | Sends everything queued now                       |
+| `ObserveRoot.wrap(Component)`                                         | Records time to first render                      |
+| `<ObserveErrorBoundary fallback onError>`                             | Reports render errors and shows a fallback        |
 
 ## Readable stack traces
 
@@ -111,7 +142,7 @@ See [`@mobile-observability/cli`](https://www.npmjs.com/package/@mobile-observab
 
 ## Privacy
 
-The SDK never reads request or response bodies, headers or query strings, and never sends the device's IP address or location. URLs are reduced to host and path templates. Log-event attribute keys that look like credentials or payment data (`password`, `token`, `card`…) are redacted on device before anything leaves the app. The dashboard itself may record the request IP and CDN geo headers of the ingest call.
+The SDK never reads request bodies, successful response bodies, headers or query strings, and never sends the device's IP address or location. URLs are reduced to host and path templates. Error response bodies are read only with `networkErrorBodiesEnabled: true`, and a phone number is sent only when the app passes it to `Observe.setUser`. Keys that look like credentials or payment data (`password`, `token`, `pin`, `card`…) are redacted on device, in log-event attributes and in error bodies, before anything leaves the app. The dashboard itself may record the request IP and CDN geo headers of the ingest call.
 
 ## License
 
