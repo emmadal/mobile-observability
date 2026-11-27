@@ -55,9 +55,23 @@ async function UserContent({ searchParams }: Pick<PageProps<'/users/detail'>, 's
     >
       <div className="flex flex-col gap-4 px-5 py-6 sm:px-8">
         <PageHeader
-          title={userId}
+          title={user.phone ?? userId}
           description={
             <span className="flex flex-wrap items-center gap-2">
+              {user.segment && (
+                <>
+                  <span className="rounded bg-raised px-1.5 text-2xs font-medium text-ink-2 uppercase">
+                    {user.segment}
+                  </span>
+                  <span aria-hidden="true">·</span>
+                </>
+              )}
+              {user.phone && (
+                <>
+                  <span className="font-mono text-xs">Phone {user.phone}</span>
+                  <span aria-hidden="true">·</span>
+                </>
+              )}
               <span className="font-mono text-xs">{userId}</span>
               <span aria-hidden="true">·</span>
               <span>{formatCount(user.sessions)} sessions, all time</span>

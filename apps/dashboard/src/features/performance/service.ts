@@ -18,6 +18,8 @@ import {
   type ResolvedWindow,
 } from '@/features/overview/filters';
 import type { FilterOptions } from '@/features/overview/service';
+import type { NetworkRequest } from '@/features/telemetry/request-trace';
+import { requestTraceColumns, toRequestTrace } from '@/features/telemetry/request-trace-query';
 
 export { METRIC_LABELS, METRIC_TARGETS_MS };
 
@@ -75,29 +77,8 @@ export interface NetworkRow {
 }
 
 /** One individual HTTP request, newest first. */
-export interface RecentRequest {
-  id: number;
-  timestamp: Date;
-  method: string;
-  host: string;
-  path: string;
-  statusCode: number;
-  durationMs: number;
-  /** Time to first response byte, when captured. */
-  ttfbMs: number | null;
-  /** W3C trace id the SDK propagated upstream. */
-  traceId: string | null;
-  /** Connection type reported by the SDK's native layer: wifi, cellular... */
-  networkType: string | null;
-  /** Transport-level failure, e.g. a timeout; null when the server answered. */
-  error: string | null;
-  projectName: string;
-  appVersion: string;
-  platform: 'ios' | 'android';
-  sessionId: string | null;
-  /** Database id of the session, when the session row exists. */
-  sessionRowId: number | null;
-}
+/** A captured request with its full trace (failure message, error body...). */
+export type RecentRequest = NetworkRequest;
 
 export type StatusCodeClass = '2xx' | '3xx' | '4xx' | '5xx';
 
@@ -360,15 +341,7 @@ export async function getNetwork(
   };
   if (projectIds.length === 0) return empty;
 
-  const conditions: (SQL | undefined)[] = [
-    inArray(requests.projectId, projectIds),
-    gte(requests.timestamp, window.from),
-    lt(requests.timestamp, window.to),
-  ];
-  if (filters.platform) conditions.push(eq(requests.platform, filters.platform as PlatformKey));
-  if (filters.environment) conditions.push(eq(requests.environment, filters.environment));
-  if (filters.version) conditions.push(eq(requests.appVersion, filters.version));
-  const scope = and(...conditions);
+  const scope = requestScope(projectIds, filters, window);
 
   const durationPercentile = (fraction: number) =>
     sql<number | null>`percentile_cont(${fraction}) within group (order by ${requests.durationMs})`;
@@ -410,34 +383,7 @@ export async function getNetwork(
       .from(requests)
       .where(scope)
       .groupBy(requests.statusCode),
-    getDb()
-      .select({
-        id: requests.id,
-        timestamp: requests.timestamp,
-        method: requests.method,
-        host: requests.host,
-        path: requests.path,
-        statusCode: requests.statusCode,
-        durationMs: requests.durationMs,
-        ttfbMs: requests.timeToFirstByteMs,
-        traceId: requests.traceId,
-        networkType: requests.networkType,
-        error: requests.error,
-        projectName: projects.name,
-        appVersion: requests.appVersion,
-        platform: requests.platform,
-        sessionId: requests.sessionId,
-        sessionRowId: sessions.id,
-      })
-      .from(requests)
-      .innerJoin(projects, eq(projects.id, requests.projectId))
-      .leftJoin(
-        sessions,
-        and(eq(sessions.projectId, requests.projectId), eq(sessions.sessionId, requests.sessionId)),
-      )
-      .where(scope)
-      .orderBy(desc(requests.timestamp), desc(requests.id))
-      .limit(20),
+    networkRequests(scope, 20),
   ]);
 
   const totalRequests = Number(totals[0]?.total ?? 0);
@@ -465,6 +411,84 @@ export async function getNetwork(
     p95Ms: toNumber(overall[0]?.p95),
     p50Ms: toNumber(overall[0]?.p50),
     statuses,
-    recent: recentRows.map((row) => ({ ...row, timestamp: new Date(row.timestamp) })),
+    recent: recentRows,
   };
+}
+
+function requestScope(
+  projectIds: string[],
+  filters: OverviewFilters,
+  window: ResolvedWindow,
+): SQL | undefined {
+  const conditions: (SQL | undefined)[] = [
+    inArray(requests.projectId, projectIds),
+    gte(requests.timestamp, window.from),
+    lt(requests.timestamp, window.to),
+  ];
+  if (filters.platform) conditions.push(eq(requests.platform, filters.platform as PlatformKey));
+  if (filters.environment) conditions.push(eq(requests.environment, filters.environment));
+  if (filters.version) conditions.push(eq(requests.appVersion, filters.version));
+  return and(...conditions);
+}
+
+/** Newest requests in scope with their trace, project, session and user. */
+async function networkRequests(scope: SQL | undefined, limit: number): Promise<NetworkRequest[]> {
+  const rows = await getDb()
+    .select({
+      ...requestTraceColumns,
+      projectName: projects.name,
+      appVersion: requests.appVersion,
+      platform: requests.platform,
+      sessionId: requests.sessionId,
+      sessionRowId: sessions.id,
+      userId: requests.userId,
+      sessionUserId: sessions.userId,
+      userPhone: sessions.userPhone,
+    })
+    .from(requests)
+    .innerJoin(projects, eq(projects.id, requests.projectId))
+    .leftJoin(
+      sessions,
+      and(eq(sessions.projectId, requests.projectId), eq(sessions.sessionId, requests.sessionId)),
+    )
+    .where(scope)
+    .orderBy(desc(requests.timestamp), desc(requests.id))
+    .limit(limit);
+  return rows.map((row) => ({
+    ...toRequestTrace(row),
+    projectName: row.projectName,
+    appVersion: row.appVersion,
+    platform: row.platform,
+    sessionId: row.sessionId,
+    sessionRowId: row.sessionRowId,
+    // The session's user covers requests sent before the app identified it.
+    userId: row.userId ?? row.sessionUserId,
+    userPhone: row.userPhone,
+  }));
+}
+
+export const ENDPOINT_REQUESTS_LIMIT = 25;
+
+/** The latest requests of one endpoint, optionally only those that did not succeed. */
+export async function getEndpointRequests(
+  options: FilterOptions,
+  filters: OverviewFilters,
+  window: ResolvedWindow,
+  endpoint: { method: string; host: string; path: string },
+  failedOnly: boolean,
+): Promise<NetworkRequest[]> {
+  const projectIds = selectedProjectIds(options, filters);
+  if (projectIds.length === 0) return [];
+  return networkRequests(
+    and(
+      requestScope(projectIds, filters, window),
+      eq(requests.method, endpoint.method),
+      eq(requests.host, endpoint.host),
+      eq(requests.path, endpoint.path),
+      failedOnly
+        ? sql`(${requests.statusCode} >= 400 or ${requests.statusCode} = 0 or ${requests.error} is not null)`
+        : undefined,
+    ),
+    ENDPOINT_REQUESTS_LIMIT,
+  );
 }

@@ -64,9 +64,9 @@ Three moving parts, one Postgres database:
 ### Design rules worth knowing
 
 - **One contract** — the envelope schema is a standalone package; the SDK and the server can evolve without breaking each other.
-- **Server-first dashboard** — all dashboard data mutations are Next.js **Server Actions** and every page reads data on the server; there is no client-side data-fetching layer and no dashboard data API exposed to the browser. Authentication uses Better Auth's own route handlers.
+- **Server-first dashboard** — all dashboard data mutations are Next.js **Server Actions** and every page reads data on the server (an endpoint's request traces load on demand through a Server Action); there is no client-side data-fetching layer and no dashboard data API exposed to the browser. Authentication uses Better Auth's own route handlers.
 - **Fail fast, stay cheap** — ingest enforces hard limits (payload size, event count, cardinality-capped URL templates, retention windows) so a noisy app or a bad deploy can't take your server down.
-- **Private by design** — no request/response bodies, no headers, no query strings, no IP addresses are stored; URLs are path-templated.
+- **Private by design** — no request bodies, headers or query strings are stored, URLs are path-templated; error response bodies and users' phone numbers are only sent when the app opts in.
 
 ---
 
@@ -194,8 +194,11 @@ What you get out of the box:
 - **Crashes and errors** — uncaught JS errors, unhandled promise rejections and native crashes (SIGSEGV, `NSException`, JVM exceptions). A crash report is sent on the next launch.
 - **Sessions** — lifecycle-tracked sessions with ok / errored / crashed status.
 - **Performance** — cold/warm launch, bundle load, time-to-render and time-to-interactive.
-- **Network** — `XMLHttpRequest` **and** the native `fetch` (expo/fetch) are tracked with status, timing and sizes; query strings are stripped and paths are templated (`/items/:id`).
+- **Network** — `XMLHttpRequest` **and** the native `fetch` (expo/fetch) are tracked with status, timing and sizes; query strings are stripped and paths are templated (`/items/:id`). Each request opens as a trace on the dashboard: a **network failure** (no response, with the platform's message) or an **API error** (status, and the response body with `networkErrorBodiesEnabled: true`).
+- **Users** — `Observe.setUser({ id, phone, segment })` links sessions to the signed-in user; the dashboard lists sessions with the user's phone number and counts users per segment (kyc, merchant…).
 - **Control** — `Observe.logEvent`, `Observe.reportError`, `Observe.setUser`, `Observe.markInteractive`, sampling, `beforeSend`, `ignoreUrls`, and `Observe.dispatchEvents()` to flush on demand.
+
+Dashboard pages refresh every 5 minutes by default; pick another interval, or off, in the toolbar.
 
 ## Uploading source maps
 
@@ -227,7 +230,7 @@ Unreleased changes install from GitHub with `npm install --save-dev --install-li
 
 ## Privacy and security
 
-- **Privacy** — no request/response bodies, no headers, no query strings and no IP addresses are stored. URLs are reduced to path templates with a per-day cardinality cap.
+- **Privacy** — no request bodies, headers or query strings are stored, and the SDK never sends the device's IP address or location (the dashboard records the ingest call's IP and CDN geo headers). URLs are reduced to path templates with a per-day cardinality cap. Error response bodies (`networkErrorBodiesEnabled`) and phone numbers (`Observe.setUser({ phone })`) are opt-in, and credential-like keys in error bodies are redacted on device.
 - **Dashboard security** — follows the Next.js App Router security guidance: an optimistic session gate plus server-side re-verification in every page (`apps/dashboard/src/lib/auth/session.ts`), a per-request nonce CSP (`apps/dashboard/src/proxy.ts`), `server-only` data-access boundaries, Server Actions for every mutation, and sanitized same-origin redirects.
 - **Report vulnerabilities** privately via a [GitHub security advisory](https://github.com/emmadal/mobile-observability/security/advisories/new) rather than a public issue.
 

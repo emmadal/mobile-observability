@@ -98,6 +98,17 @@ export default function Home() {
         />
       </View>
 
+      <Text style={styles.section}>User</Text>
+      <View style={styles.group}>
+        <ActionButton
+          label="Sign in (demo agent)"
+          onPress={() =>
+            Observe.setUser({ id: 'kyc:231770000001', phone: '231770000001', segment: 'kyc' })
+          }
+        />
+        <ActionButton label="Sign out" onPress={() => Observe.setUser(null)} />
+      </View>
+
       <Text style={styles.section}>Events</Text>
       <View style={styles.group}>
         <ActionButton

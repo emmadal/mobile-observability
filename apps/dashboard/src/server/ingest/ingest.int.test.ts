@@ -285,6 +285,76 @@ describe('ingest processing', () => {
     expect(row?.userId).toBe('user-43');
   });
 
+  it('links a session to the user carried by its requests, events and metrics', async () => {
+    const startedAt = Date.now() - 10_000;
+    await send(
+      envelope([
+        { type: 'session', sessionId: 's1', startedAt, status: 'ok', errorCount: 0, init: true },
+      ]),
+    );
+    const request = {
+      type: 'request',
+      eventId: 'r-user',
+      timestamp: Date.now(),
+      sessionId: 's1',
+      method: 'GET',
+      host: 'api.example.com',
+      path: '/agents/me',
+      statusCode: 200,
+      durationMs: 80,
+    } as const;
+    await send(envelope([request], { user: { id: 'kya:231770000002' } }));
+    let [row] = await db.select().from(sessions);
+    expect(row).toMatchObject({
+      userId: 'kya:231770000002',
+      userPhone: null,
+      userSegment: 'kya',
+    });
+
+    // A 0.3 SDK names the phone and segment; the session follows the latest user.
+    await send(
+      envelope(
+        [{ type: 'event', eventId: 'e-user', timestamp: Date.now(), sessionId: 's1', name: 'x.y' }],
+        { user: { id: 'agent-9', phone: '231770000009', segment: 'merchant' } },
+      ),
+    );
+    [row] = await db.select().from(sessions);
+    expect(row).toMatchObject({
+      userId: 'agent-9',
+      userPhone: '231770000009',
+      userSegment: 'merchant',
+    });
+
+    // Signed out: the session keeps its last user, phone and segment.
+    await send(
+      envelope([
+        { type: 'session', sessionId: 's1', startedAt, status: 'ok', errorCount: 0, init: false },
+      ]),
+    );
+    [row] = await db.select().from(sessions);
+    expect(row).toMatchObject({ userId: 'agent-9', userPhone: '231770000009' });
+  });
+
+  it('stores the phone and segment sent with a session', async () => {
+    await send(
+      envelope(
+        [
+          {
+            type: 'session',
+            sessionId: 's2',
+            startedAt: Date.now(),
+            status: 'ok',
+            errorCount: 0,
+            init: true,
+          },
+        ],
+        { user: { id: 'ftth:0886000000', phone: '0886000000' } },
+      ),
+    );
+    const [row] = await db.select().from(sessions);
+    expect(row).toMatchObject({ userPhone: '0886000000', userSegment: 'ftth' });
+  });
+
   it('labels JS issues for OTA updates and native issues for new builds', async () => {
     await send(
       envelope([
@@ -367,9 +437,29 @@ describe('ingest processing', () => {
           timeToFirstByteMs: 1180,
           traceId: '4bf92f3577b34da6a3ce929d0e0e4736',
           networkType: 'wifi',
+          responseBody: '{"message":"Payment provider unavailable"}',
+        },
+        {
+          type: 'request',
+          eventId: 'r-offline',
+          timestamp: Date.now(),
+          method: 'GET',
+          host: 'api.example.com',
+          path: '/api/v1/balance',
+          statusCode: 0,
+          durationMs: 30_000,
+          error: 'timeout',
+          errorMessage: 'The request timed out.',
         },
       ]),
     );
+    const [offline] = await db.select().from(requests).where(eq(requests.eventId, 'r-offline'));
+    expect(offline).toMatchObject({
+      statusCode: 0,
+      error: 'timeout',
+      errorMessage: 'The request timed out.',
+      responseBody: null,
+    });
     const [row] = await db.select().from(requests).where(eq(requests.eventId, 'r-trace'));
     expect(row).toMatchObject({
       method: 'POST',
@@ -378,6 +468,8 @@ describe('ingest processing', () => {
       timeToFirstByteMs: 1180,
       traceId: '4bf92f3577b34da6a3ce929d0e0e4736',
       networkType: 'wifi',
+      errorMessage: null,
+      responseBody: '{"message":"Payment provider unavailable"}',
     });
   });
 

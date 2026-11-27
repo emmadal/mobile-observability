@@ -2,6 +2,7 @@ import type {
   AppContextInput,
   DeviceContextInput,
   ItemInput,
+  UserContextInput,
 } from '@mobile-observability/protocol';
 
 /** Envelope-level context. Items recorded under different contexts are sent in separate envelopes. */
@@ -9,7 +10,7 @@ export interface EnvelopeContext {
   installationId: string;
   app: AppContextInput;
   device: DeviceContextInput;
-  user?: { id: string };
+  user?: UserContextInput;
 }
 
 interface QueueEntry {

@@ -20,7 +20,13 @@ import {
   formatPercent,
   timeAgo,
 } from '@/features/telemetry/format';
-import { listUsers, USERS_PAGE_SIZE } from '@/features/users/service';
+import {
+  listUsers,
+  MAX_SEGMENT_LENGTH,
+  NO_SEGMENT,
+  type SegmentSummary,
+  USERS_PAGE_SIZE,
+} from '@/features/users/service';
 
 export const metadata = { title: 'Users' };
 
@@ -69,9 +75,11 @@ async function UsersContent({ searchParams }: Pick<PageProps<'/users'>, 'searchP
     ? parsed
     : { ...parsed, project: null };
   const query = singleParam(params.q, MAX_EVENT_SEARCH_LENGTH) ?? null;
+  const segment = singleParam(params.segment, MAX_SEGMENT_LENGTH) ?? null;
   const window = resolveWindow(filters.range, now);
   const page = await listUsers(options, filters, window, {
     query,
+    segment,
     cursor: singleParam(params.cursor, 512) ?? null,
   });
 
@@ -117,10 +125,17 @@ async function UsersContent({ searchParams }: Pick<PageProps<'/users'>, 'searchP
           </dl>
         </Panel>
 
+        <SegmentPanel
+          segments={page.segments}
+          selected={segment}
+          hrefFor={(value) => `/users?${buildQuery(filters, { segment: value, q: query })}`}
+        />
+
         <form action="/users" method="get" className="flex items-center gap-2">
           {[...toSearchParams(filters)].map(([key, value]) => (
             <input key={key} type="hidden" name={key} value={value} />
           ))}
+          {segment && <input type="hidden" name="segment" value={segment} />}
           <label htmlFor="user-search" className="sr-only">
             Search users
           </label>
@@ -132,7 +147,7 @@ async function UsersContent({ searchParams }: Pick<PageProps<'/users'>, 'searchP
               type="search"
               defaultValue={query ?? ''}
               maxLength={MAX_EVENT_SEARCH_LENGTH}
-              placeholder="Search by user id"
+              placeholder="Search by user id or phone"
               className="h-8 w-64 rounded-md border border-line-strong bg-night pr-3 pl-8 text-xs text-ink placeholder:text-ink-3 outline-none transition-colors hover:border-ink-3 focus:border-focus focus:ring-2 focus:ring-focus/30"
             />
           </div>
@@ -144,7 +159,7 @@ async function UsersContent({ searchParams }: Pick<PageProps<'/users'>, 'searchP
           </button>
           {query && (
             <Link
-              href={`/users?${toSearchParams(filters).toString()}`}
+              href={`/users?${buildQuery(filters, { segment })}`}
               className="text-xs text-ink-3 hover:text-ink"
             >
               Clear
@@ -153,7 +168,7 @@ async function UsersContent({ searchParams }: Pick<PageProps<'/users'>, 'searchP
         </form>
 
         <Panel
-          title="Active users"
+          title={segment ? `Active users · ${segmentLabel(segment)}` : 'Active users'}
           description={`${rangeLabel(filters.range)} · most recently active first. Anonymous sessions are not listed.`}
         >
           {page.users.length === 0 ? (
@@ -173,7 +188,7 @@ async function UsersContent({ searchParams }: Pick<PageProps<'/users'>, 'searchP
               <div className="flex items-center gap-3 text-xs">
                 {params.cursor && (
                   <Link
-                    href={`/users?${toSearchParams(filters).toString()}`}
+                    href={`/users?${buildQuery(filters, { segment, q: query })}`}
                     className="text-ink-3 hover:text-ink"
                   >
                     Back to newest
@@ -181,7 +196,7 @@ async function UsersContent({ searchParams }: Pick<PageProps<'/users'>, 'searchP
                 )}
                 {page.cursor && (
                   <Link
-                    href={`/users?${buildQuery(filters, { cursor: page.cursor, q: query })}`}
+                    href={`/users?${buildQuery(filters, { cursor: page.cursor, q: query, segment })}`}
                     className="font-medium text-ink hover:underline"
                   >
                     Older users
@@ -219,11 +234,14 @@ function UserTable({
 }) {
   return (
     <div className="mt-3 overflow-x-auto">
-      <table className="w-full min-w-[52rem] text-left text-xs">
+      <table className="w-full min-w-[58rem] text-left text-xs">
         <thead className="border-y border-line text-ink-3">
           <tr>
             <th scope="col" className="w-[30%] px-5 py-2 font-medium">
               User
+            </th>
+            <th scope="col" className="px-3 py-2 font-medium">
+              Segment
             </th>
             <th scope="col" className="px-3 py-2 text-right font-medium">
               Sessions
@@ -259,12 +277,22 @@ function UserTable({
                     className="block wrap-anywhere font-mono text-xs font-medium text-ink hover:underline"
                     title={user.userId}
                   >
-                    {user.userId}
+                    {user.phone ?? user.userId}
                   </Link>
                   <p className="mt-0.5 text-2xs text-ink-3">
+                    {user.phone && <span className="font-mono">{user.userId} · </span>}
                     {formatCount(user.projects)} {user.projects === 1 ? 'project' : 'projects'} ·{' '}
                     {user.appVersion ?? '—'}
                   </p>
+                </td>
+                <td className="px-3 py-3 whitespace-nowrap">
+                  {user.segment ? (
+                    <span className="rounded bg-raised px-1.5 py-0.5 text-2xs font-medium text-ink-2 uppercase">
+                      {user.segment}
+                    </span>
+                  ) : (
+                    <span className="text-2xs text-ink-3">—</span>
+                  )}
                 </td>
                 <td className="px-3 py-3 text-right whitespace-nowrap text-ink tabular">
                   {formatCount(user.sessions)}
@@ -299,6 +327,89 @@ function UserTable({
         </tbody>
       </table>
     </div>
+  );
+}
+
+function segmentLabel(segment: string | null): string {
+  return !segment || segment === NO_SEGMENT ? 'No segment' : segment.toUpperCase();
+}
+
+/**
+ * Users per segment (kyc, kya, ftth, merchant...): the segment the app passed to
+ * Observe.setUser, or the "segment:" prefix of its user ids. Each card filters.
+ */
+function SegmentPanel({
+  segments,
+  selected,
+  hrefFor,
+}: {
+  segments: SegmentSummary[];
+  selected: string | null;
+  hrefFor: (segment: string | null) => string;
+}) {
+  if (segments.length === 0) return null;
+  const total = segments.reduce((sum, entry) => sum + entry.users, 0);
+  return (
+    <Panel
+      title="Users by segment"
+      description="From the segment passed to Observe.setUser, or the prefix of ids like kyc:… — select one to filter."
+    >
+      <ul className="mt-3 grid grid-cols-2 gap-px border-t border-line bg-line sm:grid-cols-3 lg:grid-cols-5">
+        <SegmentCard
+          label="All segments"
+          users={total}
+          detail={`${formatCount(segments.length)} segments`}
+          href={hrefFor(null)}
+          selected={!selected}
+        />
+        {segments.map((entry) => {
+          const value = entry.segment ?? NO_SEGMENT;
+          return (
+            <SegmentCard
+              key={value}
+              label={segmentLabel(entry.segment)}
+              users={entry.users}
+              detail={`${formatCount(entry.activeLast24h)} active 24 h · ${formatCompact(entry.sessions)} ${entry.sessions === 1 ? 'session' : 'sessions'}`}
+              href={hrefFor(value)}
+              selected={selected === value}
+            />
+          );
+        })}
+      </ul>
+    </Panel>
+  );
+}
+
+function SegmentCard({
+  label,
+  users,
+  detail,
+  href,
+  selected,
+}: {
+  label: string;
+  users: number;
+  detail: string;
+  href: string;
+  selected: boolean;
+}) {
+  return (
+    <li className="bg-panel">
+      <Link
+        href={href}
+        aria-current={selected ? 'true' : undefined}
+        className={`flex h-full flex-col gap-1 px-5 py-3.5 transition-colors hover:bg-raised/60 ${
+          selected ? 'bg-raised shadow-[inset_0_-2px_0_0_var(--color-ink)]' : ''
+        }`}
+      >
+        <span className="text-2xs font-medium tracking-wide text-ink-3 uppercase">{label}</span>
+        <span className="font-wide text-lg font-semibold tracking-tight text-ink tabular">
+          {formatCount(users)}{' '}
+          <span className="text-xs font-normal text-ink-3">{users === 1 ? 'user' : 'users'}</span>
+        </span>
+        <span className="text-2xs text-ink-3">{detail}</span>
+      </Link>
+    </li>
   );
 }
 

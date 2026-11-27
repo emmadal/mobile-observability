@@ -192,6 +192,10 @@ export const sessions = pgTable(
     sessionId: text().notNull(),
     installationId: text().notNull(),
     userId: text(),
+    /** Phone number (MSISDN) the app attached to the user, if any. */
+    userPhone: text(),
+    /** App-defined user group ("kyc", "merchant"...), or the `prefix:` of the user id. */
+    userSegment: text(),
     status: sessionStatus().default('ok').notNull(),
     errorCount: integer().default(0).notNull(),
     startedAt: occurredAt(),
@@ -256,7 +260,12 @@ export const requests = pgTable(
     bytesReceived: integer(),
     bytesSent: integer(),
     timeToFirstByteMs: doublePrecision(),
+    /** Transport failure kind when no response arrived: network error, timeout, aborted. */
     error: text(),
+    /** The platform's failure message, e.g. "The request timed out." */
+    errorMessage: text(),
+    /** Redacted start of an error response body (SDK opt-in). */
+    responseBody: text(),
     routeName: text(),
     /** Connection type reported by the SDK's native layer: wifi, cellular... */
     networkType: text(),

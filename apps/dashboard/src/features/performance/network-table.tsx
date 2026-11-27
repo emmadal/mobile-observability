@@ -2,9 +2,13 @@
 
 import { XIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { type EndpointRequestsResult, loadEndpointRequestsAction } from '@/app/actions/network';
+import { toSearchParams } from '@/features/overview/filters';
 import { formatDuration } from '@/features/overview/format';
-import { formatCount, formatDateTime, formatPercent, timeAgo } from '@/features/telemetry/format';
-import type { NetworkView, RecentRequest } from './service';
+import { useOverviewNavigation } from '@/features/overview/overview-frame';
+import { formatCount, formatPercent } from '@/features/telemetry/format';
+import { RequestTraceRow } from '@/features/telemetry/request-trace-details';
+import type { NetworkView } from './service';
 
 interface Props {
   network: NetworkView;
@@ -17,8 +21,8 @@ const rowKey = (row: { method: string; host: string; path: string }) =>
 
 /**
  * Endpoints grouped by method, host and path, slowest P90 first. Summaries
- * stay on one line; "View" opens a sheet with the full endpoint details and
- * the recent requests captured for it.
+ * stay on one line; "View" opens a sheet with the endpoint's numbers and its
+ * latest request traces, loaded on demand.
  */
 export function NetworkTable({ network, now }: Props) {
   const [selected, setSelected] = useState<string | null>(null);
@@ -115,28 +119,43 @@ export function NetworkTable({ network, now }: Props) {
       </div>
 
       {row && (
-        <EndpointSheet
-          row={row}
-          requests={network.recent.filter((request) => sameEndpoint(request, row))}
-          now={now}
-          onClose={() => setSelected(null)}
-        />
+        <EndpointSheet key={rowKey(row)} row={row} now={now} onClose={() => setSelected(null)} />
       )}
     </>
   );
 }
 
-function sameEndpoint(
-  request: RecentRequest,
-  row: { method: string; host: string; path: string },
-): boolean {
-  return request.method === row.method && request.host === row.host && request.path === row.path;
+type LoadState = { status: 'loading' } | EndpointRequestsResult;
+
+/** The endpoint's latest traces under the page filters, refetched when they change. */
+function useEndpointRequests(
+  endpoint: { method: string; host: string; path: string },
+  failedOnly: boolean,
+): LoadState {
+  const { filters } = useOverviewNavigation();
+  const query = toSearchParams(filters).toString();
+  const { method, host, path } = endpoint;
+  const [state, setState] = useState<LoadState>({ status: 'loading' });
+  useEffect(() => {
+    let current = true;
+    setState({ status: 'loading' });
+    loadEndpointRequestsAction({ method, host, path, query, failedOnly })
+      .then((result) => {
+        if (current) setState(result);
+      })
+      .catch(() => {
+        if (current) setState({ error: 'Could not load the requests. Try again.' });
+      });
+    return () => {
+      current = false;
+    };
+  }, [method, host, path, query, failedOnly]);
+  return state;
 }
 
 /** Right-side sheet with the full endpoint details, above a dimmed backdrop. */
 function EndpointSheet({
   row,
-  requests,
   now,
   onClose,
 }: {
@@ -151,10 +170,11 @@ function EndpointSheet({
     p90Ms: number | null;
     p95Ms: number | null;
   };
-  requests: RecentRequest[];
   now: number;
   onClose: () => void;
 }) {
+  const [failedOnly, setFailedOnly] = useState(row.errorCount > 0);
+  const state = useEndpointRequests(row, failedOnly);
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
       <button
@@ -205,64 +225,65 @@ function EndpointSheet({
             />
           </dl>
 
-          <p className="px-5 pt-4 pb-2 text-2xs font-medium tracking-wide text-ink-3 uppercase">
-            Recent requests ({formatCount(requests.length)})
-          </p>
-          {requests.length === 0 ? (
+          <div className="flex items-center justify-between gap-3 px-5 pt-4 pb-2">
+            <p className="text-2xs font-medium tracking-wide text-ink-3 uppercase">
+              Latest traces
+              {'requests' in state && ` (${formatCount(state.requests.length)})`}
+            </p>
+            <fieldset className="flex items-center gap-1 text-2xs">
+              <legend className="sr-only">Requests to show</legend>
+              {[
+                { value: true, label: 'Not OK' },
+                { value: false, label: 'All' },
+              ].map((option) => (
+                <button
+                  key={option.label}
+                  type="button"
+                  aria-pressed={failedOnly === option.value}
+                  onClick={() => setFailedOnly(option.value)}
+                  className={
+                    failedOnly === option.value
+                      ? 'rounded bg-raised px-2 py-1 font-semibold text-ink'
+                      : 'rounded px-2 py-1 text-ink-3 hover:bg-raised/60 hover:text-ink'
+                  }
+                >
+                  {option.label}
+                </button>
+              ))}
+            </fieldset>
+          </div>
+          {'status' in state ? (
+            <p className="px-5 pb-4 text-xs text-ink-3" aria-live="polite">
+              Loading traces…
+            </p>
+          ) : 'error' in state ? (
+            <p className="px-5 pb-4 text-xs text-critical" role="alert">
+              {state.error}
+            </p>
+          ) : state.requests.length === 0 ? (
             <p className="px-5 pb-4 text-xs text-ink-2">
-              No individual request for this endpoint in the latest captures.
+              {failedOnly
+                ? 'No failed request for this endpoint in this range.'
+                : 'No request for this endpoint in this range.'}
             </p>
           ) : (
             <ul className="border-t border-line">
-              {requests.map((request) => (
-                <li
+              {state.requests.map((request) => (
+                <RequestTraceRow
                   key={request.id}
-                  className="border-b border-line px-5 py-2.5 text-xs last:border-b-0"
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <time
-                      dateTime={request.timestamp.toISOString()}
-                      title={formatDateTime(request.timestamp)}
-                      className="text-ink-3 tabular"
-                    >
-                      {timeAgo(request.timestamp, now)}
-                    </time>
-                    <span
-                      className={
-                        request.error
-                          ? 'text-2xs text-critical'
-                          : request.statusCode >= 500
-                            ? 'text-critical tabular'
-                            : request.statusCode >= 400
-                              ? 'text-warning tabular'
-                              : 'text-ink-2 tabular'
-                      }
-                    >
-                      {request.error ? 'failed' : request.statusCode}
-                    </span>
-                    <span className="text-ink tabular">{formatDuration(request.durationMs)}</span>
-                  </div>
-                  <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-2xs text-ink-3">
-                    <span>
-                      {request.projectName} · {request.appVersion} · {request.platform}
-                    </span>
-                    {request.networkType && <span>· {request.networkType}</span>}
-                    {request.ttfbMs !== null && (
-                      <span className="tabular">· TTFB {formatDuration(request.ttfbMs)}</span>
-                    )}
-                    {request.traceId && (
-                      <span className="font-mono wrap-anywhere">· trace {request.traceId}</span>
-                    )}
-                    {request.sessionRowId && (
-                      <a
-                        href={`/sessions/${request.sessionRowId}`}
-                        className="font-mono text-ink-2 hover:text-ink hover:underline"
-                      >
-                        · session {shortIdOf(request.sessionId)}
-                      </a>
-                    )}
-                  </p>
-                </li>
+                  trace={request}
+                  now={now}
+                  context={
+                    <>
+                      <span>
+                        {request.projectName} · {request.appVersion} · {request.platform}
+                      </span>
+                      {(request.userPhone || request.userId) && (
+                        <span className="font-mono">· {request.userPhone ?? request.userId}</span>
+                      )}
+                    </>
+                  }
+                />
               ))}
             </ul>
           )}
@@ -270,10 +291,6 @@ function EndpointSheet({
       </section>
     </div>
   );
-}
-
-function shortIdOf(id: string | null): string {
-  return id && id.length > 8 ? id.slice(0, 8) : (id ?? '');
 }
 
 function SheetStat({ label, value, detail }: { label: string; value: string; detail?: string }) {

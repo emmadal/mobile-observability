@@ -123,7 +123,12 @@ export const requestItemSchema = z.object({
   timeToFirstByteMs: z.number().nonnegative().optional(),
   /** W3C trace id the SDK injected upstream via `traceparent`. */
   traceId: id.optional(),
+  /** Transport failure kind when no response arrived: network error, timeout, aborted. */
   error: truncated(256).optional(),
+  /** Underlying failure message, e.g. the platform's "The request timed out." */
+  errorMessage: truncated(512).optional(),
+  /** Start of the body of an error response (status >= 400), when the app opted in. */
+  responseBody: truncated(LIMITS.maxResponseBodyLength).optional(),
   routeName: truncated(256).optional(),
   /** Connection type reported by the native layer: wifi, cellular, ethernet... */
   networkType: truncated(16).optional(),
@@ -178,6 +183,15 @@ export const deviceContextSchema = z.object({
   locale: z.string().max(32).optional(),
 });
 
+export const userContextSchema = z.object({
+  /** The app's own stable user identifier. */
+  id: z.string().min(1).max(128),
+  /** Phone number (MSISDN) the app chose to attach, shown on sessions and users. */
+  phone: truncated(32).optional(),
+  /** App-defined group of users, e.g. a product line or role ("kyc", "merchant"). */
+  segment: truncated(64).optional(),
+});
+
 const envelopeHeaderSchema = z.object({
   schemaVersion: z.number().int(),
   sentAt: epochMs,
@@ -185,7 +199,7 @@ const envelopeHeaderSchema = z.object({
   installationId: id,
   app: appContextSchema,
   device: deviceContextSchema,
-  user: z.object({ id: z.string().min(1).max(128) }).optional(),
+  user: userContextSchema.optional(),
 });
 
 export const envelopeSchema = envelopeHeaderSchema.extend({
@@ -202,6 +216,7 @@ export type EventItem = z.output<typeof eventItemSchema>;
 export type Item = z.output<typeof itemSchema>;
 export type AppContext = z.output<typeof appContextSchema>;
 export type DeviceContext = z.output<typeof deviceContextSchema>;
+export type UserContext = z.output<typeof userContextSchema>;
 export type Envelope = z.output<typeof envelopeSchema>;
 
 /** Shapes the SDK writes (before server-side defaults and truncation). */
@@ -210,6 +225,7 @@ export type BreadcrumbInput = z.input<typeof breadcrumbSchema>;
 export type ItemInput = z.input<typeof itemSchema>;
 export type AppContextInput = z.input<typeof appContextSchema>;
 export type DeviceContextInput = z.input<typeof deviceContextSchema>;
+export type UserContextInput = z.input<typeof userContextSchema>;
 export type EnvelopeInput = z.input<typeof envelopeSchema>;
 
 export interface SchemaIssue {

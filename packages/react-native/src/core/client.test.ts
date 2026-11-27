@@ -222,6 +222,45 @@ describe('ObservabilityClient sessions, events and TTI', () => {
     client.close();
   });
 
+  it('re-sends the open session with the user on sign-in, once per change', async () => {
+    const { client, platform } = await started();
+    await client.flush();
+    platform.sent.length = 0;
+
+    client.setUser({ id: ' kyc:231770000001 ', phone: '231770000001', segment: 'kyc' });
+    client.setUser({ id: 'kyc:231770000001', phone: '231770000001', segment: 'kyc' });
+    await client.flush();
+    const sessionEnvelopes = platform.sent.filter((envelope) =>
+      envelope.items.some((item) => item.type === 'session'),
+    );
+    expect(sessionEnvelopes).toHaveLength(1);
+    expect(sessionEnvelopes[0]?.user).toEqual({
+      id: 'kyc:231770000001',
+      phone: '231770000001',
+      segment: 'kyc',
+    });
+    expect(sessionEnvelopes[0]?.items).toEqual([
+      expect.objectContaining({ type: 'session', sessionId: client.sessionId, init: false }),
+    ]);
+
+    platform.sent.length = 0;
+    client.setUser({ id: 'merchant:7', phone: '  ', segment: '' });
+    client.logEvent('order.created');
+    await client.flush();
+    expect(platform.sent.every((envelope) => envelope.user?.id === 'merchant:7')).toBe(true);
+    expect(platform.sent[0]?.user).toEqual({ id: 'merchant:7' });
+
+    platform.sent.length = 0;
+    client.setUser(null);
+    client.logEvent('signed.out');
+    await client.flush();
+    expect(platform.sent.flatMap((envelope) => envelope.items)).toEqual([
+      expect.objectContaining({ type: 'event', name: 'signed.out' }),
+    ]);
+    expect(platform.sent[0]?.user).toBeUndefined();
+    client.close();
+  });
+
   it('logs user-defined events with attributes (AC-36)', async () => {
     const { client, platform } = await started();
     client.logEvent('report.exported', {

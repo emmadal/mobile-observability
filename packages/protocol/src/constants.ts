@@ -20,6 +20,8 @@ export const LIMITS = {
   maxBreadcrumbs: 100,
   maxRawStackLength: 32 * 1024,
   maxMetricValueMs: 60 * 60 * 1000,
+  /** Error response body kept per failed request (characters). */
+  maxResponseBodyLength: 2048,
 } as const;
 
 export const STARTUP_METRICS = [

@@ -20,5 +20,7 @@ export type {
   RequestItem,
   SchemaIssue,
   SessionItem,
+  UserContext,
+  UserContextInput,
 } from './schema.js';
 export * from './url.js';

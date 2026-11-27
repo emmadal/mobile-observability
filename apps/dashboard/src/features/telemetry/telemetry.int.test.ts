@@ -16,10 +16,15 @@ import {
   resolveWindow,
 } from '@/features/overview/filters';
 import { getFilterOptions, getOverview } from '@/features/overview/service';
-import { getNetwork, getScreens, getStartupView } from '@/features/performance/service';
+import {
+  getEndpointRequests,
+  getNetwork,
+  getScreens,
+  getStartupView,
+} from '@/features/performance/service';
 import { getReleases } from '@/features/releases/service';
 import { getSessionDetail, listSessions } from '@/features/sessions/service';
-import { getUserDetail, listUsers, USERS_PAGE_SIZE } from '@/features/users/service';
+import { getUserDetail, listUsers, NO_SEGMENT, USERS_PAGE_SIZE } from '@/features/users/service';
 import { createTestProject, db, resetDatabase, type TestProject } from '../../../test/fixtures';
 
 const NOW = new Date();
@@ -124,12 +129,16 @@ async function addSession(
   at: Date,
   overrides: Omit<TelemetryExtras, 'sessionId' | 'routeName'> & {
     status?: 'ok' | 'errored' | 'crashed' | 'abnormal';
+    userPhone?: string;
+    userSegment?: string;
   } = {},
 ) {
   const sessionId = randomUUID();
   await db.insert(sessions).values({
     ...context(projectId, at, overrides),
     sessionId,
+    userPhone: overrides.userPhone ?? null,
+    userSegment: overrides.userSegment ?? null,
     status: overrides.status ?? 'ok',
     startedAt: at,
     lastSeenAt: new Date(at.getTime() + 5 * MINUTE),
@@ -768,6 +777,73 @@ describe('users', () => {
     expect(androidOnly.totals.users).toBe(1);
   });
 
+  it('counts users per segment, filters by segment and searches phone numbers', async () => {
+    await addSession(shop.projectId, ago(50), {
+      userId: 'kyc:231770000001',
+      userPhone: '231770000001',
+      userSegment: 'kyc',
+    });
+    await addSession(shop.projectId, ago(40), {
+      userId: 'kyc:231770000002',
+      userSegment: 'kyc',
+      status: 'crashed',
+    });
+    await addSession(shop.projectId, ago(30), {
+      userId: 'merchant:231880000003',
+      userPhone: '231880000003',
+      userSegment: 'merchant',
+    });
+    await addSession(shop.projectId, ago(20), { userId: 'legacy-7' });
+    const issueId = await addIssue(shop.projectId);
+    await addError(shop.projectId, issueId, ago(10), { userId: 'merchant:231880000003' });
+
+    const { options, filters, window } = await optionsAndFilters(shop.organizationId);
+    const page = await listUsers(options, filters, window, { query: null, cursor: null });
+    expect(page.segments).toEqual([
+      { segment: 'kyc', users: 2, sessions: 2, crashedSessions: 1, activeLast24h: 2 },
+      { segment: 'merchant', users: 1, sessions: 1, crashedSessions: 0, activeLast24h: 1 },
+      { segment: null, users: 1, sessions: 1, crashedSessions: 0, activeLast24h: 1 },
+    ]);
+    expect(page.users.find((user) => user.userId === 'merchant:231880000003')).toMatchObject({
+      phone: '231880000003',
+      segment: 'merchant',
+      errors: 1,
+    });
+
+    const merchants = await listUsers(options, filters, window, {
+      query: null,
+      cursor: null,
+      segment: 'merchant',
+    });
+    expect(merchants.users.map((user) => user.userId)).toEqual(['merchant:231880000003']);
+    expect(merchants.totals).toMatchObject({ users: 1, errors: 1, dau: 1, mau: 1 });
+    // The breakdown keeps every segment so the cards stay comparable.
+    expect(merchants.segments).toHaveLength(3);
+
+    const kyc = await listUsers(options, filters, window, {
+      query: null,
+      cursor: null,
+      segment: 'kyc',
+    });
+    expect(kyc.totals).toMatchObject({ users: 2, errors: 0, crashedSessions: 1 });
+
+    const unsegmented = await listUsers(options, filters, window, {
+      query: null,
+      cursor: null,
+      segment: NO_SEGMENT,
+    });
+    expect(unsegmented.users.map((user) => user.userId)).toEqual(['legacy-7']);
+
+    const byPhone = await listUsers(options, filters, window, {
+      query: '770000001',
+      cursor: null,
+    });
+    expect(byPhone.users.map((user) => user.userId)).toEqual(['kyc:231770000001']);
+
+    const profile = await getUserDetail(shop.organizationId, 'kyc:231770000001');
+    expect(profile).toMatchObject({ phone: '231770000001', segment: 'kyc' });
+  });
+
   it('paginates users by last activity with a stable cursor', async () => {
     for (let index = 0; index < USERS_PAGE_SIZE + 4; index += 1) {
       await addSession(shop.projectId, ago(index + 1), {
@@ -899,6 +975,11 @@ describe('performance', () => {
     });
     // Recent requests are the latest individual calls, newest first.
     expect(network.recent).toHaveLength(4);
+    expect(network.recent[0]).toMatchObject({
+      projectName: 'Shop',
+      errorMessage: null,
+      responseBody: null,
+    });
     expect(network.recent[0]).toMatchObject({ path: '/feed', statusCode: 200, durationMs: 500 });
     expect(network.recent.map((row) => row.timestamp.getTime())).toEqual([
       ago(15).getTime(),
@@ -906,6 +987,59 @@ describe('performance', () => {
       ago(25).getTime(),
       ago(30).getTime(),
     ]);
+  });
+
+  it('lists the traces of one endpoint with their failure details and user', async () => {
+    const sessionId = await addSession(shop.projectId, ago(60), {
+      userId: 'kyc:231770000001',
+      userPhone: '231770000001',
+      userSegment: 'kyc',
+    });
+    const request = (at: Date, statusCode: number, extra: Record<string, unknown> = {}) =>
+      db.insert(requests).values({
+        ...context(shop.projectId, at, { sessionId }),
+        method: 'POST',
+        host: 'api.example.com',
+        path: '/login',
+        statusCode,
+        durationMs: 120,
+        ...extra,
+      });
+    await request(ago(30), 200);
+    await request(ago(20), 401, { responseBody: '{"message":"Invalid PIN"}' });
+    await request(ago(10), 0, { error: 'timeout', errorMessage: 'The request timed out.' });
+    await db.insert(requests).values({
+      ...context(shop.projectId, ago(5)),
+      method: 'GET',
+      host: 'api.example.com',
+      path: '/other',
+      statusCode: 500,
+      durationMs: 10,
+    });
+
+    const { options, filters, window } = await optionsAndFilters(shop.organizationId);
+    const endpoint = { method: 'POST', host: 'api.example.com', path: '/login' };
+    const all = await getEndpointRequests(options, filters, window, endpoint, false);
+    expect(all.map((row) => row.statusCode)).toEqual([0, 401, 200]);
+    expect(all[0]).toMatchObject({
+      error: 'timeout',
+      errorMessage: 'The request timed out.',
+      userId: 'kyc:231770000001',
+      userPhone: '231770000001',
+      sessionId,
+    });
+    expect(all[0]?.sessionRowId).toEqual(expect.any(Number));
+
+    const failed = await getEndpointRequests(options, filters, window, endpoint, true);
+    expect(failed.map((row) => row.statusCode)).toEqual([0, 401]);
+    expect(failed[1]?.responseBody).toBe('{"message":"Invalid PIN"}');
+
+    // Another workspace's filter options never reach this workspace's requests.
+    const other = await createTestProject('Elsewhere');
+    const foreign = await optionsAndFilters(other.organizationId);
+    expect(
+      await getEndpointRequests(foreign.options, foreign.filters, foreign.window, endpoint, false),
+    ).toEqual([]);
   });
 });
 

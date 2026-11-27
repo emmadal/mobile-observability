@@ -180,7 +180,7 @@ async function SessionsContent({ searchParams }: Pick<PageProps<'/sessions'>, 's
                 type="search"
                 defaultValue={sessionParams.query ?? ''}
                 maxLength={MAX_SESSION_SEARCH_LENGTH}
-                placeholder="Search session, install or user id"
+                placeholder="Search session, user id or phone"
                 className="h-8 w-64 rounded-md border border-line-strong bg-night pr-3 pl-8 text-xs text-ink placeholder:text-ink-3 outline-none transition-colors hover:border-ink-3 focus:border-focus focus:ring-2 focus:ring-focus/30"
               />
             </div>
@@ -250,11 +250,14 @@ async function SessionsContent({ searchParams }: Pick<PageProps<'/sessions'>, 's
 function SessionTable({ sessions, now }: { sessions: SessionListItem[]; now: number }) {
   return (
     <div className="mt-3 overflow-x-auto">
-      <table className="w-full min-w-[46rem] text-left text-xs">
+      <table className="w-full min-w-[56rem] text-left text-xs">
         <thead className="border-y border-line text-ink-3">
           <tr>
             <th scope="col" className="px-5 py-2 font-medium">
               Session
+            </th>
+            <th scope="col" className="px-3 py-2 font-medium">
+              User
             </th>
             <th scope="col" className="px-3 py-2 font-medium">
               Status
@@ -297,6 +300,9 @@ function SessionTable({ sessions, now }: { sessions: SessionListItem[]; now: num
                   {osLabel(session.platform, session.osVersion)}
                 </p>
               </td>
+              <td className="px-3 py-2.5">
+                <SessionUser session={session} />
+              </td>
               <td className="px-3 py-2.5 whitespace-nowrap">
                 <HealthBadge
                   health={STATUS_HEALTH[session.status]}
@@ -337,6 +343,30 @@ function SessionTable({ sessions, now }: { sessions: SessionListItem[]; now: num
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+/** Phone number first (who it is), then the segment and the app's own user id. */
+function SessionUser({ session }: { session: SessionListItem }) {
+  if (!session.userId) return <span className="text-2xs text-ink-3">Anonymous</span>;
+  return (
+    <div className="min-w-0">
+      <p className="font-mono text-xs whitespace-nowrap text-ink">
+        {session.userPhone ?? session.userId}
+      </p>
+      <p className="flex flex-wrap items-center gap-x-1.5 text-2xs text-ink-3">
+        {session.userSegment && (
+          <span className="rounded bg-raised px-1.5 font-medium text-ink-2 uppercase">
+            {session.userSegment}
+          </span>
+        )}
+        {session.userPhone && (
+          <span className="wrap-anywhere font-mono" title={session.userId}>
+            {session.userId}
+          </span>
+        )}
+      </p>
     </div>
   );
 }

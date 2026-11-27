@@ -70,6 +70,14 @@ export class SessionManager {
     if (fatal) this.emit();
   }
 
+  /**
+   * Re-sends the current session unchanged, e.g. after sign-in, so the server
+   * links it to the user without waiting for the session to background.
+   */
+  touch(): void {
+    this.emit();
+  }
+
   /** The update to persist with a fatal crash (the process will not live to send it). */
   snapshot(): SessionUpdate | null {
     return this.current ? { ...this.current } : null;

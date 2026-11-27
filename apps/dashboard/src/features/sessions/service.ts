@@ -5,6 +5,8 @@ import { getDb } from '@/db/client';
 import { errorEvents, issues, logEvents, metrics, projects, requests, sessions } from '@/db/schema';
 import type { OverviewFilters, PlatformKey, ResolvedWindow } from '@/features/overview/filters';
 import type { FilterOptions } from '@/features/overview/service';
+import type { RequestTrace } from '@/features/telemetry/request-trace';
+import { requestTraceColumns, toRequestTrace } from '@/features/telemetry/request-trace-query';
 import { decodeCursor, encodeCursor, keysetCondition, nextCursor } from '@/server/db/keyset';
 
 export const SESSIONS_PAGE_SIZE = 25;
@@ -15,7 +17,7 @@ export const MAX_SESSION_SEARCH_LENGTH = 64;
 
 export interface SessionListParams {
   status: SessionStatusFilter;
-  /** Substring matched against session, installation and user ids. */
+  /** Substring matched against session, installation and user ids and phone numbers. */
   query: string | null;
   cursor: string | null;
 }
@@ -27,6 +29,10 @@ export interface SessionListItem {
   projectName: string;
   installationId: string;
   userId: string | null;
+  /** Phone number (MSISDN) attached to the user. */
+  userPhone: string | null;
+  /** User group: kyc, merchant... */
+  userSegment: string | null;
   status: 'ok' | 'errored' | 'crashed' | 'abnormal';
   errorCount: number;
   /** Observe.logEvent calls captured in this session. */
@@ -76,6 +82,7 @@ function searchCondition(query: string | null): SQL | undefined {
     ilike(sessions.sessionId, pattern),
     ilike(sessions.installationId, pattern),
     ilike(sessions.userId, pattern),
+    ilike(sessions.userPhone, pattern),
   );
 }
 
@@ -129,6 +136,8 @@ export async function listSessions(
       projectName: projects.name,
       installationId: sessions.installationId,
       userId: sessions.userId,
+      userPhone: sessions.userPhone,
+      userSegment: sessions.userSegment,
       status: sessions.status,
       errorCount: sessions.errorCount,
       startedAt: sessions.startedAt,
@@ -200,6 +209,8 @@ export interface SessionDetail {
   projectName: string;
   installationId: string;
   userId: string | null;
+  userPhone: string | null;
+  userSegment: string | null;
   status: 'ok' | 'errored' | 'crashed' | 'abnormal';
   errorCount: number;
   startedAt: Date;
@@ -249,22 +260,7 @@ export interface SessionLogEvent {
   attributes: Record<string, unknown> | null;
 }
 
-export interface SessionRequest {
-  id: number;
-  timestamp: Date;
-  method: string;
-  host: string;
-  path: string;
-  statusCode: number;
-  durationMs: number;
-  /** Time to first response byte, when captured. */
-  ttfbMs: number | null;
-  /** W3C trace id the SDK propagated upstream. */
-  traceId: string | null;
-  /** Connection type reported by the SDK's native layer: wifi, cellular... */
-  networkType: string | null;
-  error: string | null;
-}
+export type SessionRequest = RequestTrace;
 
 export interface SessionDetailView {
   session: SessionDetail;
@@ -289,6 +285,8 @@ export async function getSessionDetail(
       projectName: projects.name,
       installationId: sessions.installationId,
       userId: sessions.userId,
+      userPhone: sessions.userPhone,
+      userSegment: sessions.userSegment,
       status: sessions.status,
       errorCount: sessions.errorCount,
       startedAt: sessions.startedAt,
@@ -367,19 +365,7 @@ export async function getSessionDetail(
       .orderBy(asc(logEvents.timestamp), asc(logEvents.id))
       .limit(100),
     db
-      .select({
-        id: requests.id,
-        timestamp: requests.timestamp,
-        method: requests.method,
-        host: requests.host,
-        path: requests.path,
-        statusCode: requests.statusCode,
-        durationMs: requests.durationMs,
-        ttfbMs: requests.timeToFirstByteMs,
-        traceId: requests.traceId,
-        networkType: requests.networkType,
-        error: requests.error,
-      })
+      .select(requestTraceColumns)
       .from(requests)
       .where(
         and(eq(requests.projectId, session.projectId), eq(requests.sessionId, session.sessionId)),
@@ -393,9 +379,6 @@ export async function getSessionDetail(
     errors,
     metrics: metricRows.map((metric) => ({ ...metric, valueMs: Number(metric.valueMs) })),
     events: eventRows,
-    requests: requestRows.map((request) => ({
-      ...request,
-      durationMs: Number(request.durationMs),
-    })),
+    requests: requestRows.map(toRequestTrace),
   };
 }

@@ -192,6 +192,53 @@ describe('parseEnvelope', () => {
     });
     expect(result.ok).toBe(false);
   });
+
+  it('keeps the user phone and segment, truncated to their limits', () => {
+    const result = parseEnvelope({
+      ...baseEnvelope(),
+      user: { id: 'kyc:231770000001', phone: `+231770000001${'9'.repeat(40)}`, segment: 'kyc' },
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.envelope.user).toEqual({
+      id: 'kyc:231770000001',
+      phone: `+231770000001${'9'.repeat(19)}`,
+      segment: 'kyc',
+    });
+  });
+
+  it('accepts a user with only an id (0.2 SDKs)', () => {
+    const result = parseEnvelope({ ...baseEnvelope(), user: { id: 'merchant:12' } });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.envelope.user).toEqual({ id: 'merchant:12' });
+  });
+
+  it('keeps the error message and truncates the error response body of a request', () => {
+    const result = parseEnvelope({
+      ...baseEnvelope(),
+      items: [
+        {
+          type: 'request',
+          eventId: 'r1',
+          timestamp: 1,
+          method: 'POST',
+          host: 'api.example.com',
+          path: '/login',
+          statusCode: 401,
+          durationMs: 120,
+          errorMessage: 'Unauthorized',
+          responseBody: 'x'.repeat(LIMITS.maxResponseBodyLength + 10),
+        },
+      ],
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const item = result.envelope.items[0];
+    expect(item?.type).toBe('request');
+    if (item?.type !== 'request') return;
+    expect(item.errorMessage).toBe('Unauthorized');
+    expect(item.responseBody).toHaveLength(LIMITS.maxResponseBodyLength);
+  });
 });
 
 describe('parseEnvelope hardening', () => {

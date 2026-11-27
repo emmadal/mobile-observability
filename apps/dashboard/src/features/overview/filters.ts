@@ -38,7 +38,8 @@ export const REFRESH_INTERVALS = [
 ] as const;
 
 export type RefreshKey = (typeof REFRESH_INTERVALS)[number]['key'];
-export const DEFAULT_REFRESH: RefreshKey = 'off';
+/** Pages refresh every 5 minutes unless the URL says otherwise (`refresh=off`). */
+export const DEFAULT_REFRESH: RefreshKey = '5m';
 
 /** A custom range may reach this far back (beyond the longest retention). */
 export const MAX_CUSTOM_RANGE_DAYS = 90;

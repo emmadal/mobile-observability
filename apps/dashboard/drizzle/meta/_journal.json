@@ -64,6 +64,13 @@
       "when": 1795526362068,
       "tag": "0008_alert-rules",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1795792415161,
+      "tag": "0009_user-phone-segment-request-details",
+      "breakpoints": true
     }
   ]
 }
