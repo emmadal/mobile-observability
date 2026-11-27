@@ -34,6 +34,7 @@ import {
   osLabel,
   timeAgo,
 } from '@/features/telemetry/format';
+import { RequestTraceRow } from '@/features/telemetry/request-trace-details';
 
 export const metadata = { title: 'Performance' };
 
@@ -691,109 +692,35 @@ function RecentRequests({ requests, now }: { requests: RecentRequest[]; now: num
   return (
     <Panel
       title="Recent requests"
-      description="The 20 latest captured HTTP requests, newest first."
+      description="The 20 latest captured HTTP requests, newest first. Open one for its trace: network failure or API answer, error message and response body."
     >
       {requests.length === 0 ? (
         <p className="px-5 pt-3 pb-5 text-sm text-ink-2">No requests captured in this range.</p>
       ) : (
-        <div className="mt-3 overflow-x-auto">
-          <table className="w-full min-w-[52rem] text-left text-xs">
-            <thead className="border-y border-line text-ink-3">
-              <tr>
-                <th scope="col" className="w-[40%] px-5 py-2 font-medium">
-                  Request
-                </th>
-                <th scope="col" className="px-3 py-2 font-medium">
-                  Project
-                </th>
-                <th scope="col" className="px-3 py-2 text-right font-medium">
-                  Status
-                </th>
-                <th scope="col" className="px-3 py-2 text-right font-medium">
-                  Duration
-                </th>
-                <th scope="col" className="px-5 py-2 text-right font-medium">
-                  When
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {requests.map((request) => (
-                <tr key={request.id} className="border-b border-line last:border-b-0">
-                  <td className="px-5 py-2.5">
-                    <p
-                      className="wrap-anywhere font-mono text-2xs"
-                      title={`${request.method} ${request.host}${request.path}`}
-                    >
-                      <span className="font-semibold text-ink">{request.method}</span>{' '}
-                      <span className="text-ink-2">
-                        {request.host}
-                        {request.path}
-                      </span>
-                    </p>
-                    {request.error && (
-                      <p className="wrap-anywhere text-2xs text-critical" title={request.error}>
-                        {request.error}
-                      </p>
-                    )}
-                    {request.traceId && (
-                      <p className="font-mono text-2xs wrap-anywhere text-ink-3">
-                        trace {request.traceId}
-                      </p>
-                    )}
-                  </td>
-                  <td className="px-3 py-2.5 whitespace-nowrap text-ink-2">
-                    {request.projectName}
-                  </td>
-                  <td className="px-3 py-2.5 text-right whitespace-nowrap tabular">
-                    {request.error ? (
-                      <span className="text-2xs text-critical">failed</span>
-                    ) : (
-                      <span
-                        className={
-                          request.statusCode >= 500
-                            ? 'text-critical'
-                            : request.statusCode >= 400
-                              ? 'text-warning'
-                              : 'text-ink-2'
-                        }
-                      >
-                        {request.statusCode}
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-3 py-2.5 text-right whitespace-nowrap text-ink tabular">
-                    {formatDuration(request.durationMs)}
-                    {request.ttfbMs !== null && (
-                      <span
-                        className="block text-2xs text-ink-3 tabular"
-                        title="Time to first byte"
-                      >
-                        TTFB {formatDuration(request.ttfbMs)}
-                      </span>
-                    )}
-                    {request.networkType && (
-                      <span className="block text-2xs text-ink-3">{request.networkType}</span>
-                    )}
-                  </td>
-                  <td className="px-5 py-2.5 text-right whitespace-nowrap text-ink-3 tabular">
-                    <time
-                      dateTime={request.timestamp.toISOString()}
-                      title={formatDateTime(request.timestamp)}
-                    >
-                      {timeAgo(request.timestamp, now)}
-                    </time>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <ul className="mt-3 border-t border-line">
+          {requests.map((request) => (
+            <RequestTraceRow
+              key={request.id}
+              trace={request}
+              now={now}
+              context={
+                <>
+                  <span>
+                    {request.projectName} · {request.appVersion} · {request.platform}
+                  </span>
+                  {request.networkType && <span>· {request.networkType}</span>}
+                  {(request.userPhone || request.userId) && (
+                    <span className="font-mono">· {request.userPhone ?? request.userId}</span>
+                  )}
+                </>
+              }
+            />
+          ))}
+        </ul>
       )}
     </Panel>
   );
 }
-
 function NetworkStat({ label, value, detail }: { label: string; value: string; detail: string }) {
   return (
     <div className="flex flex-col gap-1 border-line px-5 py-4 max-sm:border-b max-sm:odd:border-r">

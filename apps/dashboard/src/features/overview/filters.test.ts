@@ -12,10 +12,10 @@ const NOW = new Date('2026-11-24T10:17:30.000Z');
 const HOUR = 3_600_000;
 
 describe('parseOverviewFilters', () => {
-  it('defaults to the last 24 hours, no refresh, no dimension filters', () => {
+  it('defaults to the last 24 hours, refresh every 5 minutes, no dimension filters', () => {
     expect(parseOverviewFilters({}, NOW)).toEqual({
       range: { kind: 'quick', key: '24h' },
-      refresh: 'off',
+      refresh: '5m',
       project: null,
       platform: null,
       environment: null,
@@ -27,7 +27,7 @@ describe('parseOverviewFilters', () => {
     const filters = parseOverviewFilters(
       {
         range: '3h',
-        refresh: '5m',
+        refresh: '15m',
         project: 'p1',
         platform: 'android',
         env: 'production',
@@ -37,7 +37,7 @@ describe('parseOverviewFilters', () => {
     );
     expect(filters).toEqual({
       range: { kind: 'quick', key: '3h' },
-      refresh: '5m',
+      refresh: '15m',
       project: 'p1',
       platform: 'android',
       environment: 'production',
@@ -48,8 +48,14 @@ describe('parseOverviewFilters', () => {
   it('falls back to defaults for unknown values', () => {
     const filters = parseOverviewFilters({ range: '2y', refresh: '1s', platform: 'web' }, NOW);
     expect(filters.range).toEqual({ kind: 'quick', key: '24h' });
-    expect(filters.refresh).toBe('off');
+    expect(filters.refresh).toBe('5m');
     expect(filters.platform).toBeNull();
+  });
+
+  it('keeps auto-refresh off when the URL turns it off', () => {
+    const filters = parseOverviewFilters({ refresh: 'off' }, NOW);
+    expect(filters.refresh).toBe('off');
+    expect(toSearchParams(filters).toString()).toBe('refresh=off');
   });
 
   it('accepts a custom range of UTC days, the quick range winning when both are set', () => {

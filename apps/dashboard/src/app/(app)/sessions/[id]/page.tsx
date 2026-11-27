@@ -20,6 +20,8 @@ import {
   platformLabel,
   shortId,
 } from '@/features/telemetry/format';
+import { requestOutcome } from '@/features/telemetry/request-trace';
+import { RequestTraceRow } from '@/features/telemetry/request-trace-details';
 
 export const metadata = { title: 'Session' };
 
@@ -128,8 +130,12 @@ async function SessionContent({ params }: Pick<PageProps<'/sessions/[id]'>, 'par
             <Stat label="Started" value={dateTime.format(session.startedAt)} detail="UTC" />
             <Stat
               label="User"
-              value={session.userId ? shortId(session.userId) : 'Anonymous'}
-              detail={session.userId ?? session.installationId}
+              value={session.userPhone ?? (session.userId ? shortId(session.userId) : 'Anonymous')}
+              detail={
+                session.userId
+                  ? [session.userSegment, session.userId].filter(Boolean).join(' · ')
+                  : session.installationId
+              }
             />
           </dl>
         </Panel>
@@ -259,67 +265,34 @@ function MetricsPanel({ detail }: { detail: SessionDetailView }) {
 }
 
 function RequestsPanel({ detail }: { detail: SessionDetailView }) {
+  const now = Date.now();
+  const failed = detail.requests.filter((request) => requestOutcome(request).kind !== 'ok').length;
   return (
-    <Panel title="Network" description="Requests captured during this session.">
+    <Panel
+      title="Network"
+      description={`${formatCount(detail.requests.length)} requests captured during this session, ${formatCount(failed)} not OK. Open one for its trace: network failure or API answer.`}
+    >
       {detail.requests.length === 0 ? (
         <p className="px-5 pt-3 pb-5 text-sm text-ink-2">No network requests recorded.</p>
       ) : (
-        <div className="mt-3 overflow-x-auto">
-          <table className="w-full min-w-[36rem] text-left text-xs">
-            <thead className="border-y border-line text-ink-3">
-              <tr>
-                <th scope="col" className="px-5 py-2 font-medium">
-                  Request
-                </th>
-                <th scope="col" className="px-3 py-2 text-right font-medium">
-                  Status
-                </th>
-                <th scope="col" className="px-5 py-2 text-right font-medium">
-                  Duration
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {detail.requests.map((request) => (
-                <tr key={request.id} className="border-b border-line last:border-b-0">
-                  <td className="px-5 py-2">
-                    <p className="wrap-anywhere font-mono text-2xs text-ink-2">
-                      {request.method} {request.host}
-                      {request.path}
-                    </p>
-                    {request.error && (
-                      <p className="wrap-anywhere text-2xs text-critical">{request.error}</p>
-                    )}
-                    {request.traceId && (
-                      <p className="font-mono text-2xs wrap-anywhere text-ink-3">
-                        trace {request.traceId}
-                      </p>
-                    )}
-                  </td>
-                  <td className="px-3 py-2 text-right whitespace-nowrap tabular">
-                    <span className={request.statusCode >= 400 ? 'text-critical' : 'text-ink-2'}>
-                      {request.statusCode}
-                    </span>
-                  </td>
-                  <td className="px-5 py-2 text-right whitespace-nowrap text-ink-2 tabular">
-                    {formatDuration(request.durationMs)}
-                    {request.ttfbMs !== null && (
-                      <span
-                        className="block text-2xs text-ink-3 tabular"
-                        title="Time to first byte"
-                      >
-                        TTFB {formatDuration(request.ttfbMs)}
-                      </span>
-                    )}
-                    {request.networkType && (
-                      <span className="block text-2xs text-ink-3">{request.networkType}</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <ul className="mt-3 border-t border-line">
+          {detail.requests.map((request) => (
+            <RequestTraceRow
+              key={request.id}
+              trace={request}
+              now={now}
+              context={
+                request.routeName || request.networkType ? (
+                  <>
+                    {request.routeName && <span className="font-mono">{request.routeName}</span>}
+                    {request.routeName && request.networkType && <span aria-hidden="true">·</span>}
+                    {request.networkType && <span>{request.networkType}</span>}
+                  </>
+                ) : undefined
+              }
+            />
+          ))}
+        </ul>
       )}
     </Panel>
   );
@@ -389,6 +362,9 @@ function DevicePanel({ detail }: { detail: SessionDetailView }) {
     <Panel title="Session details">
       <dl className="mt-3 border-t border-line text-xs">
         <Row label="Session id" value={session.sessionId} mono />
+        <Row label="User" value={session.userId ?? 'Anonymous'} mono />
+        <Row label="Phone (MSISDN)" value={session.userPhone ?? '—'} mono />
+        <Row label="Segment" value={session.userSegment ?? '—'} />
         <Row label="Installation" value={session.installationId} mono />
         <Row label="Project" value={session.projectName} />
         <Row label="Environment" value={session.environment} />

@@ -29,6 +29,7 @@ import {
 } from '../symbolication/symbolicator';
 import type { ClientContext } from './client-context';
 import { computeFingerprint, culpritOf } from './fingerprint';
+import { type UserColumns, userColumns } from './user';
 
 type Transaction = Parameters<Parameters<Database['transaction']>[0]>[0];
 type Executor = Database | Transaction;
@@ -111,11 +112,12 @@ export async function processEnvelope(
   }
 
   const context = contextColumns(envelope, project.projectId, client);
+  const user = userColumns(envelope.user);
   const symbolicated = await symbolicateErrors(db, project.projectId, envelope, errors);
 
   await db.transaction(async (tx) => {
-    for (const item of sessionItems) await upsertSession(tx, context, item, at);
-    await storeErrors(tx, context, errors, symbolicated, at);
+    for (const item of sessionItems) await upsertSession(tx, context, user, item, at);
+    await storeErrors(tx, context, user, errors, symbolicated, at);
     if (metricItems.length > 0) {
       await tx
         .insert(metrics)
@@ -152,9 +154,41 @@ export async function processEnvelope(
         )
         .onConflictDoNothing();
     }
+    await linkSessionsToUser(tx, context, user, [...metricItems, ...requestItems, ...eventItems]);
   });
 
   return { accepted: envelope.items.length - dropped, dropped };
+}
+
+/**
+ * Apps identify the user after the session started (login screen, persisted
+ * login restored asynchronously), and 0.2 SDKs only re-send a session when it
+ * backgrounds. Any item carrying a user therefore links its session to that
+ * user, so the session and the Users page do not stay anonymous meanwhile.
+ */
+async function linkSessionsToUser(
+  tx: Executor,
+  context: Context,
+  user: UserColumns,
+  items: (MetricItem | RequestItem | EventItem)[],
+): Promise<void> {
+  if (!context.userId) return;
+  const sessionIds = [
+    ...new Set(items.flatMap((item) => (item.sessionId ? [item.sessionId] : []))),
+  ];
+  if (sessionIds.length === 0) return;
+  await tx
+    .update(sessions)
+    .set({ userId: context.userId, userPhone: user.userPhone, userSegment: user.userSegment })
+    .where(
+      and(
+        eq(sessions.projectId, context.projectId),
+        inArray(sessions.sessionId, sessionIds),
+        sql`(${sessions.userId} is distinct from ${context.userId}
+          or ${sessions.userPhone} is distinct from ${user.userPhone}
+          or ${sessions.userSegment} is distinct from ${user.userSegment})`,
+      ),
+    );
 }
 
 async function symbolicateErrors(
@@ -205,6 +239,7 @@ const maxDate = (dates: Date[]): Date => new Date(Math.max(...dates.map((date) =
 async function storeErrors(
   tx: Executor,
   context: Context,
+  user: UserColumns,
   errors: ErrorItem[],
   symbolicated: (SymbolicatedFrame[] | null)[],
   at: (timestamp: number) => Date,
@@ -292,6 +327,7 @@ async function storeErrors(
   await upsertErrorSessions(
     tx,
     context,
+    user,
     prepared.filter((e) => delivered.has(e.item.eventId)),
   );
 }
@@ -350,11 +386,17 @@ async function applyIssueDeltas(
  * Envelopes without a user (signed out) keep the session's last known user.
  */
 const latestUserId = sql`coalesce(excluded.user_id, ${sessions.userId})`;
+/** Phone and segment follow the user they came with. */
+const latestUserPhone = sql`case when excluded.user_id is not null
+  then excluded.user_phone else ${sessions.userPhone} end`;
+const latestUserSegment = sql`case when excluded.user_id is not null
+  then excluded.user_segment else ${sessions.userSegment} end`;
 
 /** Fatal errors crash their session; others mark it errored (creating it if unseen). */
 async function upsertErrorSessions(
   tx: Executor,
   context: Context,
+  user: UserColumns,
   fresh: PreparedError[],
 ): Promise<void> {
   const bySession = new Map<string, PreparedError[]>();
@@ -378,6 +420,7 @@ async function upsertErrorSessions(
           sessionId,
           installationId: context.installationId,
           userId: context.userId,
+          ...user,
           status: (fatal ? 'crashed' : 'errored') as 'crashed' | 'errored',
           errorCount: bucket.length,
           startedAt: minDate(occurred),
@@ -418,6 +461,8 @@ async function upsertErrorSessions(
         lastSeenAt: sql`greatest(${sessions.lastSeenAt}, excluded.last_seen_at)`,
         endedAt: sql`coalesce(${sessions.endedAt}, excluded.ended_at)`,
         userId: latestUserId,
+        userPhone: latestUserPhone,
+        userSegment: latestUserSegment,
       },
     });
 }
@@ -425,6 +470,7 @@ async function upsertErrorSessions(
 async function upsertSession(
   tx: Executor,
   context: Context,
+  user: UserColumns,
   item: SessionItem,
   at: (timestamp: number) => Date,
 ): Promise<void> {
@@ -438,6 +484,7 @@ async function upsertSession(
       sessionId: item.sessionId,
       installationId: context.installationId,
       userId: context.userId,
+      ...user,
       status: item.status,
       errorCount: item.errorCount,
       startedAt,
@@ -471,6 +518,8 @@ async function upsertSession(
         endedAt: sql`coalesce(excluded.ended_at, ${sessions.endedAt})`,
         lastSeenAt: sql`greatest(${sessions.lastSeenAt}, excluded.last_seen_at)`,
         userId: latestUserId,
+        userPhone: latestUserPhone,
+        userSegment: latestUserSegment,
       },
     });
 }
@@ -542,6 +591,8 @@ async function storeRequests(
         traceId: item.traceId ?? null,
         networkType: item.networkType ?? null,
         error: item.error ?? null,
+        errorMessage: item.errorMessage ?? null,
+        responseBody: item.responseBody ?? null,
         routeName: item.routeName ?? null,
       })),
     )
