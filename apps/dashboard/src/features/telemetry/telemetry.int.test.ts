@@ -10,6 +10,7 @@ import {
   listIssues,
   setIssueStatus,
 } from '@/features/issues/service';
+import { listNetworkRequests, NETWORK_PAGE_SIZE } from '@/features/network/service';
 import {
   type OverviewFilters,
   parseOverviewFilters,
@@ -1040,6 +1041,167 @@ describe('performance', () => {
     expect(
       await getEndpointRequests(foreign.options, foreign.filters, foreign.window, endpoint, false),
     ).toEqual([]);
+  });
+});
+
+describe('network', () => {
+  it('lists requests per segment with msisdn, URL called and what the API answered', async () => {
+    const kya = await addSession(shop.projectId, ago(120), {
+      userId: 'kya:231770000001',
+      userPhone: '231770000001',
+      userSegment: 'kya',
+    });
+    const merchant = await addSession(courierId, ago(120), {
+      userId: 'merchant:231880000002',
+      userPhone: '231880000002',
+      userSegment: 'merchant',
+    });
+    const anonymous = await addSession(shop.projectId, ago(120));
+    const request = (
+      projectId: string,
+      sessionId: string,
+      at: Date,
+      statusCode: number,
+      extra: Record<string, unknown> = {},
+    ) =>
+      db.insert(requests).values({
+        ...context(projectId, at, { sessionId }),
+        method: 'POST',
+        host: 'api.example.com',
+        path: '/agents/:id',
+        statusCode,
+        durationMs: 100 + statusCode / 10,
+        ...extra,
+      });
+    await request(shop.projectId, kya, ago(50), 200, {
+      url: 'https://api.example.com/agents/42?lang=en',
+      contentType: 'application/json',
+      responseBody: '{"status":false,"message":"Agent suspended"}',
+    });
+    await request(shop.projectId, kya, ago(40), 422, {
+      responseBody: '{"message":"MSISDN already registered"}',
+    });
+    await request(courierId, merchant, ago(30), 0, { error: 'timeout' });
+    await request(courierId, merchant, ago(20), 201);
+    await request(shop.projectId, anonymous, ago(10), 200);
+
+    const { options, filters, window } = await optionsAndFilters(shop.organizationId);
+    const all = await listNetworkRequests(options, filters, window, {
+      segment: null,
+      status: 'all',
+      query: null,
+      cursor: null,
+    });
+    expect(all.requests.map((row) => row.statusCode)).toEqual([200, 201, 0, 422, 200]);
+    expect(all.segments).toEqual([
+      { segment: 'kya', requests: 2, failed: 1, users: 1 },
+      { segment: 'merchant', requests: 2, failed: 1, users: 1 },
+      { segment: null, requests: 1, failed: 0, users: 0 },
+    ]);
+    expect(all.stats).toMatchObject({
+      requests: 5,
+      failed: 2,
+      apiErrors: 1,
+      networkFailures: 1,
+      ok: 3,
+      users: 2,
+    });
+    const oldest = all.requests.at(-1);
+    expect(oldest).toMatchObject({
+      url: 'https://api.example.com/agents/42?lang=en',
+      contentType: 'application/json',
+      responseBody: '{"status":false,"message":"Agent suspended"}',
+      userPhone: '231770000001',
+      userSegment: 'kya',
+      projectName: 'Shop',
+    });
+
+    const kyaOnly = await listNetworkRequests(options, filters, window, {
+      segment: 'kya',
+      status: 'all',
+      query: null,
+      cursor: null,
+    });
+    expect(kyaOnly.requests.map((row) => row.userSegment)).toEqual(['kya', 'kya']);
+    expect(kyaOnly.stats.requests).toBe(2);
+
+    const noSegment = await listNetworkRequests(options, filters, window, {
+      segment: NO_SEGMENT,
+      status: 'all',
+      query: null,
+      cursor: null,
+    });
+    expect(noSegment.requests).toHaveLength(1);
+
+    const failures = await listNetworkRequests(options, filters, window, {
+      segment: 'merchant',
+      status: 'network',
+      query: null,
+      cursor: null,
+    });
+    expect(failures.requests.map((row) => row.error)).toEqual(['timeout']);
+    // The outcome filter narrows the list, not the totals its chips show.
+    expect(failures.stats.requests).toBe(2);
+
+    const byPhone = await listNetworkRequests(options, filters, window, {
+      segment: null,
+      status: 'all',
+      query: '231880',
+      cursor: null,
+    });
+    expect(byPhone.requests.map((row) => row.userSegment)).toEqual(['merchant', 'merchant']);
+    const byUrl = await listNetworkRequests(options, filters, window, {
+      segment: null,
+      status: 'all',
+      query: 'lang=en',
+      cursor: null,
+    });
+    expect(byUrl.requests).toHaveLength(1);
+
+    // Another workspace never sees these requests.
+    const other = await createTestProject('Elsewhere');
+    const foreign = await optionsAndFilters(other.organizationId);
+    const empty = await listNetworkRequests(foreign.options, foreign.filters, foreign.window, {
+      segment: null,
+      status: 'all',
+      query: null,
+      cursor: null,
+    });
+    expect(empty.requests).toEqual([]);
+    expect(empty.segments).toEqual([]);
+  });
+
+  it('pages through requests newest first', async () => {
+    const sessionId = await addSession(shop.projectId, ago(600), { userSegment: 'ftth' });
+    await db.insert(requests).values(
+      Array.from({ length: NETWORK_PAGE_SIZE + 5 }, (_, index) => ({
+        ...context(shop.projectId, ago(index + 1), { sessionId }),
+        method: 'GET',
+        host: 'api.example.com',
+        path: '/plans',
+        statusCode: 200,
+        durationMs: 50,
+      })),
+    );
+    const { options, filters, window } = await optionsAndFilters(shop.organizationId);
+    const first = await listNetworkRequests(options, filters, window, {
+      segment: 'ftth',
+      status: 'all',
+      query: null,
+      cursor: null,
+    });
+    expect(first.requests).toHaveLength(NETWORK_PAGE_SIZE);
+    expect(first.cursor).toEqual(expect.any(String));
+    const second = await listNetworkRequests(options, filters, window, {
+      segment: 'ftth',
+      status: 'all',
+      query: null,
+      cursor: first.cursor,
+    });
+    expect(second.requests).toHaveLength(5);
+    expect(second.cursor).toBeNull();
+    const firstIds = new Set(first.requests.map((row) => row.id));
+    expect(second.requests.some((row) => firstIds.has(row.id))).toBe(false);
   });
 });
 

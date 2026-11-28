@@ -54,7 +54,10 @@ test('sessions show the user phone and segment, and open with request traces', a
 
   const failure = page.locator('details').filter({ hasText: '/agent/statistics' });
   await failure.locator('summary').click();
-  await expect(failure.getByText('Unable to resolve host "kyc.example.lr"')).toBeVisible();
+  // Shown on the row, and in full under Response once opened.
+  await expect(
+    failure.locator('dd').getByText('Unable to resolve host "kyc.example.lr"'),
+  ).toBeVisible();
   await expect(failure.getByText('None: the API never answered this request.')).toBeVisible();
 });
 
@@ -79,6 +82,55 @@ test('network traces tell an API error from a network failure', async ({ page })
   const recent = page.locator('details').filter({ hasText: '/agent/statistics' }).first();
   await recent.locator('summary').click();
   await expect(recent.getByText('Network error').first()).toBeVisible();
+});
+
+test('the Network menu lists requests per segment as msisdn:segment with the API answer', async ({
+  page,
+}) => {
+  await page.goto('/');
+  await page
+    .getByRole('navigation', { name: 'Main' })
+    .getByRole('link', { name: 'Network' })
+    .click();
+  await expect(page).toHaveURL(/\/network/);
+  await expect(page.getByRole('heading', { name: 'Network', level: 1 })).toBeVisible();
+
+  const segments = page.locator('section').filter({ hasText: 'Requests by segment' });
+  for (const label of ['KYC', 'KYA', 'MERCHANT', 'FTTH']) {
+    await expect(segments.getByRole('link', { name: new RegExp(`^${label}\\s`) })).toBeVisible();
+  }
+
+  await segments.getByRole('link', { name: /^MERCHANT/ }).click();
+  await expect(page).toHaveURL(/segment=merchant/);
+  await expect(page.getByRole('heading', { name: 'Requests · MERCHANT' })).toBeVisible();
+  const rows = page.locator('ul > li > details');
+  await expect(rows).toHaveCount(4);
+  for (const row of await rows.all()) await expect(row).toContainText('231880000004:merchant');
+
+  // The API answered 200, but its body says the operation failed.
+  const create = rows.filter({ hasText: 'SmallMerchant/create' });
+  await expect(create).toContainText('Body reports failure');
+  await expect(create).toContainText('“QR code already assigned”');
+  await create.locator('summary').click();
+  await expect(
+    create.getByText('kyc.example.lr/SmallMerchant/create', { exact: false }).first(),
+  ).toBeVisible();
+  await expect(create.getByText('200 OK')).toBeVisible();
+  await expect(create.getByText('application/json')).toBeVisible();
+  await expect(create.locator('pre')).toContainText('"message": "QR code already assigned"');
+
+  // The full URL as called, credentials redacted on device.
+  const login = rows.filter({ hasText: '/agent/login' });
+  await expect(login).toContainText('kyc.example.lr/agent/login?lang=en&pin=[redacted]');
+
+  await page.getByRole('link', { name: /^Network failures/ }).click();
+  await expect(page).toHaveURL(/status=network/);
+  await expect(rows).toHaveCount(1);
+  await expect(rows.first()).toContainText('Network error');
+
+  await page.goto('/network?q=231770000002');
+  await expect(rows.first()).toContainText('231770000002:kyc');
+  for (const row of await rows.all()) await expect(row).toContainText('231770000002:kyc');
 });
 
 test('an issue opens with its stack and can be resolved', async ({ page }) => {

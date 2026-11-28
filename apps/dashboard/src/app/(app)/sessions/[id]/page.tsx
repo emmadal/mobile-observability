@@ -270,7 +270,7 @@ function RequestsPanel({ detail }: { detail: SessionDetailView }) {
   return (
     <Panel
       title="Network"
-      description={`${formatCount(detail.requests.length)} requests captured during this session, ${formatCount(failed)} not OK. Open one for its trace: network failure or API answer.`}
+      description={`${formatCount(detail.requests.length)} requests between the app and its APIs during this session, ${formatCount(failed)} not OK. Open one for the URL called, the status and what the API answered.`}
     >
       {detail.requests.length === 0 ? (
         <p className="px-5 pt-3 pb-5 text-sm text-ink-2">No network requests recorded.</p>

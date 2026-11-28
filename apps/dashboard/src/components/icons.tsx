@@ -96,6 +96,18 @@ export function UsersIcon(props: IconProps) {
   );
 }
 
+/** Request up, response down: app-to-API traffic. */
+export function NetworkIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M5 13.25V2.75" />
+      <path d="M2.5 5.25 5 2.75l2.5 2.5" />
+      <path d="M11 2.75v10.5" />
+      <path d="M8.5 10.75 11 13.25l2.5-2.5" />
+    </Icon>
+  );
+}
+
 export function PerformanceIcon(props: IconProps) {
   return (
     <Icon {...props}>

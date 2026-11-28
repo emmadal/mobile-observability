@@ -264,7 +264,11 @@ export const requests = pgTable(
     error: text(),
     /** The platform's failure message, e.g. "The request timed out." */
     errorMessage: text(),
-    /** Redacted start of an error response body (SDK opt-in). */
+    /** Full URL as called: real path and query, credential values redacted (SDK opt-in). */
+    url: text(),
+    /** `Content-Type` of the response. */
+    contentType: text(),
+    /** Redacted start of the response body (SDK opt-in: errors only, or every response). */
     responseBody: text(),
     routeName: text(),
     /** Connection type reported by the SDK's native layer: wifi, cellular... */

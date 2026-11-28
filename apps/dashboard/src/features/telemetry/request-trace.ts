@@ -25,7 +25,11 @@ export interface RequestTrace {
   error: string | null;
   /** The platform's own failure message, e.g. "The request timed out." */
   errorMessage: string | null;
-  /** Redacted start of the error response body (SDK opt-in). */
+  /** Full URL as called (SDK opt-in `networkFullUrls`), credential values redacted. */
+  url: string | null;
+  /** `Content-Type` of the response. */
+  contentType: string | null;
+  /** Redacted start of the response body (SDK opt-in `networkResponseBodies`). */
   responseBody: string | null;
   /** Screen the app was on. */
   routeName: string | null;
@@ -41,6 +45,8 @@ export interface NetworkRequest extends RequestTrace {
   sessionRowId: number | null;
   userId: string | null;
   userPhone: string | null;
+  /** Segment of the session's user: kyc, kya, ftth, merchant... */
+  userSegment: string | null;
 }
 
 export type RequestOutcomeKind = 'ok' | 'redirect' | 'client' | 'server' | 'network';
@@ -176,4 +182,124 @@ export function formatBytes(value: number): string {
   if (value < 1024) return `${value} B`;
   if (value < 1024 * 1024) return `${bytes.format(value / 1024)} KB`;
   return `${bytes.format(value / (1024 * 1024))} MB`;
+}
+
+/**
+ * Who sent a request, as "msisdn:segment" (e.g. "231770000001:kya"): the
+ * phone and segment the app passed to Observe.setUser, else an id shaped
+ * "segment:msisdn" turned around, else the bare id. Null when anonymous.
+ */
+export function userLabel(user: {
+  userPhone: string | null;
+  userSegment: string | null;
+  userId: string | null;
+}): string | null {
+  const segment = user.userSegment?.toLowerCase() ?? null;
+  if (user.userPhone) return segment ? `${user.userPhone}:${segment}` : user.userPhone;
+  if (!user.userId) return null;
+  const prefixed = /^([A-Za-z][A-Za-z0-9_-]{0,31}):(.+)$/.exec(user.userId);
+  if (prefixed?.[1] && prefixed[2]) return `${prefixed[2]}:${prefixed[1].toLowerCase()}`;
+  return segment ? `${user.userId}:${segment}` : user.userId;
+}
+
+/** The URL as called when the SDK sent it, else host and templated path. */
+export function calledUrl(trace: Pick<RequestTrace, 'url' | 'host' | 'path'>): string {
+  return trace.url ?? `${trace.host}${trace.path}`;
+}
+
+/** "https://api.example.com/a?b=1" without its scheme, for compact display. */
+export function displayUrl(trace: Pick<RequestTrace, 'url' | 'host' | 'path'>): string {
+  return calledUrl(trace).replace(/^https?:\/\//i, '');
+}
+
+function parseJsonObject(body: string): Record<string, unknown> | null {
+  const trimmed = body.trim();
+  if (!trimmed.startsWith('{')) return null;
+  try {
+    const value: unknown = JSON.parse(trimmed);
+    return value && typeof value === 'object' && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+const MESSAGE_KEYS = [
+  'message',
+  'msg',
+  'error_description',
+  'errorMessage',
+  'error',
+  'detail',
+  'title',
+  'description',
+  'statusMessage',
+  'responseMessage',
+];
+const MAX_BODY_MESSAGE = 160;
+
+function shortText(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const text = value.replace(/\s+/g, ' ').trim();
+  if (!text || text === '[redacted]') return null;
+  return text.length > MAX_BODY_MESSAGE ? `${text.slice(0, MAX_BODY_MESSAGE - 1)}…` : text;
+}
+
+/**
+ * The short sentence an API put in its JSON answer ("Subscriber not found"),
+ * read from the usual keys (message, msg, error, error.message, detail...).
+ * A body cut by the size limit is searched as text. Null when there is none.
+ */
+export function bodyMessage(body: string | null): string | null {
+  if (!body) return null;
+  const json = parseJsonObject(body);
+  if (json) {
+    for (const key of MESSAGE_KEYS) {
+      const value = json[key];
+      const direct = shortText(value);
+      if (direct) return direct;
+      if (value && typeof value === 'object' && !Array.isArray(value)) {
+        const nested = shortText((value as Record<string, unknown>).message);
+        if (nested) return nested;
+      }
+    }
+    return null;
+  }
+  const match =
+    /"(message|msg|error_description|errorMessage|error|detail)"\s*:\s*"((?:[^"\\]|\\.){1,400})"/.exec(
+      body,
+    );
+  return shortText(match?.[2]);
+}
+
+const FAILED_STATUS_WORDS = new Set(['error', 'failed', 'failure', 'fail', 'ko', 'nok', 'denied']);
+
+/**
+ * Whether a JSON answer reports a failure even though the HTTP status says
+ * success, the way many APIs answer 200 with `{ "success": false }`,
+ * `{ "status": "FAILED" }`, `{ "error": "..." }` or `{ "code": 404 }`.
+ */
+export function bodyReportsFailure(body: string | null): boolean {
+  if (!body) return false;
+  const json = parseJsonObject(body);
+  if (!json) return false;
+  if (json.success === false || json.ok === false || json.status === false) return true;
+  for (const key of ['status', 'result', 'state']) {
+    const value = json[key];
+    if (typeof value === 'string' && FAILED_STATUS_WORDS.has(value.trim().toLowerCase())) {
+      return true;
+    }
+  }
+  const error = json.error;
+  if ((typeof error === 'string' && error.trim()) || (error && typeof error === 'object')) {
+    return true;
+  }
+  const errors = json.errors;
+  if (errors && typeof errors === 'object' && Object.keys(errors).length > 0) return true;
+  for (const key of ['code', 'statusCode', 'status']) {
+    const value = json[key];
+    if (typeof value === 'number' && value >= 400 && value <= 599) return true;
+  }
+  return false;
 }

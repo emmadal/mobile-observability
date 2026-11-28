@@ -19,6 +19,8 @@ export const requestTraceColumns = {
   networkType: requests.networkType,
   error: requests.error,
   errorMessage: requests.errorMessage,
+  url: requests.url,
+  contentType: requests.contentType,
   responseBody: requests.responseBody,
   routeName: requests.routeName,
 };
@@ -38,6 +40,8 @@ interface TraceRow {
   networkType: string | null;
   error: string | null;
   errorMessage: string | null;
+  url: string | null;
+  contentType: string | null;
   responseBody: string | null;
   routeName: string | null;
 }
@@ -59,6 +63,8 @@ export function toRequestTrace(row: TraceRow): RequestTrace {
     networkType: row.networkType,
     error: row.error,
     errorMessage: row.errorMessage,
+    url: row.url,
+    contentType: row.contentType,
     responseBody: row.responseBody,
     routeName: row.routeName,
   };

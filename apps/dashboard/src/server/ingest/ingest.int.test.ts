@@ -473,6 +473,45 @@ describe('ingest processing', () => {
     });
   });
 
+  it('stores the URL called, its content type and a success body', async () => {
+    await send(
+      envelope([
+        {
+          type: 'request',
+          eventId: 'r-full',
+          timestamp: Date.now(),
+          method: 'POST',
+          host: 'api.example.com',
+          path: '/SmallMerchant/create',
+          statusCode: 200,
+          durationMs: 210,
+          url: 'https://user:pw@API.example.com/SmallMerchant/create?lang=en&token=[redacted]#x',
+          contentType: 'application/json',
+          responseBody: '{"status":false,"message":"QR code already assigned"}',
+        },
+        {
+          type: 'request',
+          eventId: 'r-scheme',
+          timestamp: Date.now(),
+          method: 'GET',
+          host: 'api.example.com',
+          path: '/a',
+          statusCode: 200,
+          durationMs: 5,
+          url: 'javascript:alert(1)',
+        },
+      ]),
+    );
+    const [row] = await db.select().from(requests).where(eq(requests.eventId, 'r-full'));
+    expect(row).toMatchObject({
+      url: 'https://API.example.com/SmallMerchant/create?lang=en&token=[redacted]',
+      contentType: 'application/json',
+      responseBody: '{"status":false,"message":"QR code already assigned"}',
+    });
+    const [other] = await db.select().from(requests).where(eq(requests.eventId, 'r-scheme'));
+    expect(other?.url).toBeNull();
+  });
+
   it('stores events and drops items older than retention', async () => {
     await send(
       envelope([

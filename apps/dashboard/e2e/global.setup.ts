@@ -69,7 +69,27 @@ setup('sign in and send telemetry', async ({ page, request }) => {
       ...base,
       user,
       items: [
-        request_(40 - index, { path: '/agent/login', statusCode: 200, networkType: 'cellular' }),
+        // SDK 0.4 with networkFullUrls and networkResponseBodies: 'all'.
+        request_(40 - index, {
+          path: '/agent/login',
+          statusCode: 200,
+          networkType: 'cellular',
+          url: 'https://kyc.example.lr/agent/login?lang=en&pin=[redacted]',
+          contentType: 'application/json',
+          responseBody: '{"status":true,"message":"Welcome back","token":"[redacted]"}',
+        }),
+        ...(user.segment === 'merchant'
+          ? [
+              request_(35, {
+                path: '/SmallMerchant/create',
+                statusCode: 200,
+                routeName: '/(merchant)/home',
+                url: 'https://kyc.example.lr/SmallMerchant/create',
+                contentType: 'application/json',
+                responseBody: '{"status":false,"message":"QR code already assigned"}',
+              }),
+            ]
+          : []),
         request_(30 - index, {
           path: '/customers/add',
           statusCode: 422,

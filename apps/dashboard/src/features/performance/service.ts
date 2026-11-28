@@ -112,7 +112,7 @@ export function isStartupMetric(value: string | null | undefined): value is Star
 const toNumber = (value: unknown): number | null =>
   value === null || value === undefined ? null : Number(value);
 
-const selectedProjectIds = (options: FilterOptions, filters: OverviewFilters): string[] => {
+export const selectedProjectIds = (options: FilterOptions, filters: OverviewFilters): string[] => {
   const selected = filters.project
     ? options.projects.filter((project) => project.id === filters.project)
     : options.projects;
@@ -415,7 +415,7 @@ export async function getNetwork(
   };
 }
 
-function requestScope(
+export function requestScope(
   projectIds: string[],
   filters: OverviewFilters,
   window: ResolvedWindow,
@@ -444,6 +444,7 @@ async function networkRequests(scope: SQL | undefined, limit: number): Promise<N
       userId: requests.userId,
       sessionUserId: sessions.userId,
       userPhone: sessions.userPhone,
+      userSegment: sessions.userSegment,
     })
     .from(requests)
     .innerJoin(projects, eq(projects.id, requests.projectId))
@@ -464,6 +465,7 @@ async function networkRequests(scope: SQL | undefined, limit: number): Promise<N
     // The session's user covers requests sent before the app identified it.
     userId: row.userId ?? row.sessionUserId,
     userPhone: row.userPhone,
+    userSegment: row.userSegment,
   }));
 }
 

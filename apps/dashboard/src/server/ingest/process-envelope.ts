@@ -592,9 +592,21 @@ async function storeRequests(
         networkType: item.networkType ?? null,
         error: item.error ?? null,
         errorMessage: item.errorMessage ?? null,
+        url: item.url ? stripUrlSecrets(item.url) : null,
+        contentType: item.contentType ?? null,
         responseBody: item.responseBody ?? null,
         routeName: item.routeName ?? null,
       })),
     )
     .onConflictDoNothing();
+}
+
+/**
+ * Defense in depth for the full URL the SDK sent: only http(s) URLs are kept,
+ * without user info or fragment (the SDK already dropped both and redacted
+ * credential-like query values).
+ */
+export function stripUrlSecrets(url: string): string | null {
+  const match = /^(https?:\/\/)(?:[^/?#@]*@)?([^#]*)/i.exec(url.trim());
+  return match ? `${match[1]?.toLowerCase()}${match[2]}` : null;
 }
