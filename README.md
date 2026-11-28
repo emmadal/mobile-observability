@@ -194,7 +194,7 @@ What you get out of the box:
 - **Crashes and errors** — uncaught JS errors, unhandled promise rejections and native crashes (SIGSEGV, `NSException`, JVM exceptions). A crash report is sent on the next launch.
 - **Sessions** — lifecycle-tracked sessions with ok / errored / crashed status.
 - **Performance** — cold/warm launch, bundle load, time-to-render and time-to-interactive.
-- **Network** — `XMLHttpRequest` **and** the native `fetch` (expo/fetch) are tracked with status, timing and sizes; query strings are stripped and paths are templated (`/items/:id`). Each request opens as a trace on the dashboard: a **network failure** (no response, with the platform's message) or an **API error** (status, and the response body with `networkErrorBodiesEnabled: true`).
+- **Network** — `XMLHttpRequest` **and** the native `fetch` (expo/fetch) are tracked with status, timing, sizes and content type; by default query strings are stripped and paths are templated (`/items/:id`). The dashboard's **Network** page lists every request per user segment (kyc, kya, ftth, merchant…), each labelled `msisdn:segment`, and opens it as a trace: a **network failure** (no response, with the platform's message) or an **API answer** (status, the URL as called with `networkFullUrls: true`, and what the backend answered with `networkResponseBodies: 'all'`, flagged when a `200` body reports a failure). Metro dev server traffic is ignored in development builds.
 - **Users** — `Observe.setUser({ id, phone, segment })` links sessions to the signed-in user; the dashboard lists sessions with the user's phone number and counts users per segment (kyc, merchant…).
 - **Control** — `Observe.logEvent`, `Observe.reportError`, `Observe.setUser`, `Observe.markInteractive`, sampling, `beforeSend`, `ignoreUrls`, and `Observe.dispatchEvents()` to flush on demand.
 
@@ -230,7 +230,7 @@ Unreleased changes install from GitHub with `npm install --save-dev --install-li
 
 ## Privacy and security
 
-- **Privacy** — no request bodies, headers or query strings are stored, and the SDK never sends the device's IP address or location (the dashboard records the ingest call's IP and CDN geo headers). URLs are reduced to path templates with a per-day cardinality cap. Error response bodies (`networkErrorBodiesEnabled`) and phone numbers (`Observe.setUser({ phone })`) are opt-in, and credential-like keys in error bodies are redacted on device.
+- **Privacy** — no request bodies or headers are stored, and the SDK never sends the device's IP address or location (the dashboard records the ingest call's IP and CDN geo headers). By default URLs are reduced to path templates with a per-day cardinality cap. Full URLs (`networkFullUrls`), response bodies (`networkResponseBodies`) and phone numbers (`Observe.setUser({ phone })`) are opt-in, and credential-like keys in bodies and query strings are redacted on device.
 - **Dashboard security** — follows the Next.js App Router security guidance: an optimistic session gate plus server-side re-verification in every page (`apps/dashboard/src/lib/auth/session.ts`), a per-request nonce CSP (`apps/dashboard/src/proxy.ts`), `server-only` data-access boundaries, Server Actions for every mutation, and sanitized same-origin redirects.
 - **Report vulnerabilities** privately via a [GitHub security advisory](https://github.com/emmadal/mobile-observability/security/advisories/new) rather than a public issue.
 

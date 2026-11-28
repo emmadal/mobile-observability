@@ -60,7 +60,7 @@ export default ObserveRoot.wrap(RootLayout);
 
 Call `Observe.configure()` at module scope: once the root has mounted it throws. The same options can live in `app.json` under `expo.extra.observability`.
 
-Useful options: `sampleRate` (0 to 1, decided once per installation), `environment`, `beforeSend` (edit or drop an error), `ignoreUrls`, `sessionTimeoutMs`, `dispatchInDebug` (debug builds send nothing unless `true`), `enabled`. Collection toggles: `errorHandlingEnabled`, `networkTrackingEnabled`, `networkErrorBodiesEnabled` (default `false`, see [Network errors](#network-errors)), `hangTrackingEnabled` (with `hangThresholdMs`, default 2000) and `resourceSampleIntervalMs` (default 300000, `0` disables).
+Useful options: `sampleRate` (0 to 1, decided once per installation), `environment`, `beforeSend` (edit or drop an error), `ignoreUrls`, `sessionTimeoutMs`, `dispatchInDebug` (debug builds send nothing unless `true`), `enabled`. Collection toggles: `errorHandlingEnabled`, `networkTrackingEnabled`, `networkResponseBodies` (`'off'` by default, `'errors'` or `'all'`) and `networkFullUrls` (default `false`, see [Network requests](#network-requests)), `hangTrackingEnabled` (with `hangThresholdMs`, default 2000) and `resourceSampleIntervalMs` (default 300000, `0` disables).
 
 ## What it records
 
@@ -85,22 +85,25 @@ Observe.setUser({
 
 The open session is linked to the user right away, then every later session, error, event and request. On the dashboard, **Sessions** shows each session's phone number and segment, and **Users** counts users per segment (kyc, kya, merchant…) with a filter. Without `segment`, an id shaped `segment:rest` (`kyc:42`) gives its segment. `phone` is personal data: send it only when your privacy notice covers it.
 
-## Network errors
+## Network requests
 
-Each captured request tells a network failure from an API error:
+Every `fetch` (including Expo's native `expo/fetch`) and `XMLHttpRequest` call is recorded with method, host, templated path, status, duration, sizes and the response content type. The dashboard's **Network** page lists them per user segment, each labelled `msisdn:segment` (from `Observe.setUser`), and tells a network failure from an API answer:
 
 - **No response** (offline, DNS or TLS failure, dropped connection, timeout, abort): status `0`, the failure kind and the platform's own message, such as `Unable to resolve host "api.example.com"` or `The request timed out.`.
-- **API error** (status ≥ 400): the status code, and with `networkErrorBodiesEnabled: true` the first 2 KB of the response body, so the dashboard shows what the API answered:
+- **API answer**: the status code, plus two opt-ins that show what really happened:
+  - `networkResponseBodies: 'all'` keeps the first 4 KB of every response body, so an API that answers `200` with `{ "status": false, "message": "..." }` is visible (the dashboard flags it as _Body reports failure_). `'errors'` keeps only bodies of status ≥ 400.
+  - `networkFullUrls: true` keeps the URL as called: real path and query string instead of `/items/:id`.
 
 ```ts
 Observe.configure({
   apiKey: process.env.EXPO_PUBLIC_MOBS_KEY,
   endpoint: process.env.EXPO_PUBLIC_MOBS_ENDPOINT,
-  networkErrorBodiesEnabled: true,
+  networkResponseBodies: 'all',
+  networkFullUrls: true,
 });
 ```
 
-Bodies of successful responses and all request bodies are never read. In error bodies, JSON keys that look like credentials (`password`, `token`, `pin`, `apiKey`…) are redacted at every level before leaving the device; the rest is sent as is, so only enable it for APIs whose error bodies hold nothing you cannot store. `fetch` bodies are read from a clone, so the app gets its response without waiting.
+Request bodies and headers are never read. In bodies, JSON keys that look like credentials (`password`, `token`, `pin`, `otp`, `apiKey`…) are redacted at every level before leaving the device, and so are the values of such keys in query strings; the rest is sent as is, so only enable these for APIs whose answers hold nothing you cannot store. `fetch` bodies are read from a clone, so the app gets its response without waiting; event streams and responses announced over 1 MB are never read. In development builds, requests to the Metro dev server (symbolication, logs, HMR) are ignored.
 
 ## Screens and navigation
 
@@ -142,7 +145,7 @@ See [`@mobile-observability/cli`](https://www.npmjs.com/package/@mobile-observab
 
 ## Privacy
 
-The SDK never reads request bodies, successful response bodies, headers or query strings, and never sends the device's IP address or location. URLs are reduced to host and path templates. Error response bodies are read only with `networkErrorBodiesEnabled: true`, and a phone number is sent only when the app passes it to `Observe.setUser`. Keys that look like credentials or payment data (`password`, `token`, `pin`, `card`…) are redacted on device, in log-event attributes and in error bodies, before anything leaves the app. The dashboard itself may record the request IP and CDN geo headers of the ingest call.
+The SDK never reads request bodies or headers, and never sends the device's IP address or location. By default URLs are reduced to host and path templates and response bodies are not read; full URLs (`networkFullUrls`) and response bodies (`networkResponseBodies`) are opt-in, and a phone number is sent only when the app passes it to `Observe.setUser`. Keys that look like credentials or payment data (`password`, `token`, `pin`, `card`…) are redacted on device, in log-event attributes, response bodies and query strings, before anything leaves the app. The dashboard itself may record the request IP and CDN geo headers of the ingest call.
 
 ## License
 
