@@ -129,3 +129,39 @@ describe('sanitizeResponseBody on large bodies', () => {
     expect(body).toContain('"token":"[redacted]"');
   });
 });
+
+describe('redaction of values that are objects or arrays, in text too long to parse', () => {
+  const padding = `"rows":[${'{"id":1},'.repeat(9_000)}{"id":1}]`;
+
+  it('drops the whole value of a sensitive key', () => {
+    const body = `{"card":{"number":"4111111111111111","holder":"A"},"credentials":["s3cr3t"],"name":"ok",${padding}}`;
+    expect(body.length).toBeGreaterThan(64 * 1024);
+    const sanitized = sanitizeResponseBody(body, 4096) ?? '';
+    expect(sanitized).not.toContain('4111111111111111');
+    expect(sanitized).not.toContain('s3cr3t');
+    expect(sanitized).toContain('"card":"[redacted]"');
+    expect(sanitized).toContain('"credentials":"[redacted]"');
+    expect(sanitized).toContain('"name":"ok"');
+  });
+
+  it('drops a sensitive value cut by the scan window through to its end', () => {
+    const body = `{${padding},"token":{"value":"${'z'.repeat(20_000)}"}}`;
+    const head = sanitizeResponseBody(`{"token":{"value":"abc", "more": ${'['.repeat(10)}`, 4096);
+    expect(head).toBe('{"token":"[redacted]"');
+    expect(sanitizeResponseBody(body, 4096)).not.toContain('zzz');
+  });
+
+  it('ignores brackets inside strings when finding the end of the value', () => {
+    const body = `{"secret":{"note":"a } ] tricky \\" quote"},"visible":"yes",${padding}}`;
+    const sanitized = sanitizeResponseBody(body, 4096) ?? '';
+    expect(sanitized.startsWith('{"secret":"[redacted]","visible":"yes"')).toBe(true);
+  });
+});
+
+describe('redactUrl separators', () => {
+  it('redacts pairs separated by semicolons too', () => {
+    expect(redactUrl('https://api.example.com/a?lang=en;token=abc&pin=1;x=2', 2048)).toBe(
+      'https://api.example.com/a?lang=en;token=[redacted]&pin=[redacted];x=2',
+    );
+  });
+});

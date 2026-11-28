@@ -60,8 +60,56 @@ const FORM_PAIR = /(^|[?&;\s])([\w.[\]-]{1,128})=([^&;\s]*)/g;
 /** `<key>value</key>` (XML), or `<key>value` running to the end of the scanned text. */
 const XML_ELEMENT = /<([A-Za-z_][\w.-]{0,127})(\s[^>]*)?>([^<]*)(?:<\/\1>|$)/g;
 
+/** `"key":` followed by an object or array value. */
+const KEY_BEFORE_CONTAINER = /"((?:[^"\\]|\\.){1,128})"\s*:\s*(?=[{[])/g;
+
+/** Index just past the object or array starting at `start`; the text's end when it is cut. */
+function endOfContainer(text: string, start: number): number {
+  let depth = 0;
+  let inString = false;
+  for (let index = start; index < text.length; index += 1) {
+    const char = text[index];
+    if (inString) {
+      if (char === '\\') index += 1;
+      else if (char === '"') inString = false;
+    } else if (char === '"') {
+      inString = true;
+    } else if (char === '{' || char === '[') {
+      depth += 1;
+    } else if (char === '}' || char === ']') {
+      depth -= 1;
+      if (depth === 0) return index + 1;
+    }
+  }
+  return text.length;
+}
+
+/**
+ * Replaces the whole object or array value of every sensitive key, so text
+ * that cannot be parsed (a body too long, or cut short) loses the same
+ * values as parsed JSON does: `"card": {"number": "4111..."}` keeps nothing.
+ */
+function redactContainers(text: string): string {
+  let result = '';
+  let copied = 0;
+  KEY_BEFORE_CONTAINER.lastIndex = 0;
+  for (
+    let match = KEY_BEFORE_CONTAINER.exec(text);
+    match;
+    match = KEY_BEFORE_CONTAINER.exec(text)
+  ) {
+    if (!isSensitiveKey(match[1] ?? '')) continue;
+    const valueStart = match.index + match[0].length;
+    const valueEnd = endOfContainer(text, valueStart);
+    result += `${text.slice(copied, valueStart)}"${REDACTED}"`;
+    copied = valueEnd;
+    KEY_BEFORE_CONTAINER.lastIndex = valueEnd;
+  }
+  return result + text.slice(copied);
+}
+
 function redactText(text: string): string {
-  return text
+  return redactContainers(text)
     .replace(QUOTED_PAIR, (match, prefix: string, key: string) =>
       isSensitiveKey(key) ? `${prefix}"${REDACTED}"` : match,
     )
@@ -114,16 +162,17 @@ export function redactUrl(url: string, maxLength: number): string {
   const withoutUser = withoutFragment.replace(URL_PREFIX, '$1');
   const queryStart = withoutUser.indexOf('?');
   if (queryStart === -1) return withoutUser.slice(0, maxLength);
+  // Pairs split on `&` and `;` (both are used as separators), delimiters kept.
   const query = withoutUser
     .slice(queryStart + 1)
-    .split('&')
+    .split(/([&;])/)
     .map((pair) => {
       const separator = pair.indexOf('=');
       if (separator === -1) return pair;
       const rawKey = pair.slice(0, separator);
       return isSensitiveKey(decodeQueryKey(rawKey)) ? `${rawKey}=${REDACTED}` : pair;
     })
-    .join('&');
+    .join('');
   return `${withoutUser.slice(0, queryStart)}?${query}`.slice(0, maxLength);
 }
 

@@ -28,6 +28,10 @@ also published as the GitHub release for its `react-native-v<version>` tag.
   Metro-only endpoints are now ignored.
 - `fetch` called with a `URL` from another URL implementation (polyfills) is
   tracked instead of skipped.
+- **Redaction of large bodies.** In a body too long to parse as JSON, a
+  sensitive key whose value is an object or array (`"card": {...}`) now has
+  the whole value redacted, as parsed JSON already did; query strings are
+  split on `;` as well as `&` before their keys are tested.
 
 ## 0.3.0
 
