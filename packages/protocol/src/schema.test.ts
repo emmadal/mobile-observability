@@ -239,6 +239,35 @@ describe('parseEnvelope', () => {
     expect(item.errorMessage).toBe('Unauthorized');
     expect(item.responseBody).toHaveLength(LIMITS.maxResponseBodyLength);
   });
+
+  it('keeps the full URL, content type and body of a successful request, truncated', () => {
+    const result = parseEnvelope({
+      ...baseEnvelope(),
+      items: [
+        {
+          type: 'request',
+          eventId: 'r2',
+          timestamp: 1,
+          method: 'GET',
+          host: 'api.example.com',
+          path: '/orders/:id',
+          statusCode: 200,
+          durationMs: 80,
+          url: `https://api.example.com/orders/42?q=${'y'.repeat(LIMITS.maxUrlLength)}`,
+          contentType: 'application/json; charset=utf-8',
+          responseBody: '{"status":false,"message":"Insufficient stock"}',
+        },
+      ],
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const item = result.envelope.items[0];
+    if (item?.type !== 'request') throw new Error('expected a request item');
+    expect(item.url).toHaveLength(LIMITS.maxUrlLength);
+    expect(item.url?.startsWith('https://api.example.com/orders/42?q=')).toBe(true);
+    expect(item.contentType).toBe('application/json; charset=utf-8');
+    expect(item.responseBody).toBe('{"status":false,"message":"Insufficient stock"}');
+  });
 });
 
 describe('parseEnvelope hardening', () => {

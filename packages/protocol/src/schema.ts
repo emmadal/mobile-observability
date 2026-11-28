@@ -127,7 +127,15 @@ export const requestItemSchema = z.object({
   error: truncated(256).optional(),
   /** Underlying failure message, e.g. the platform's "The request timed out." */
   errorMessage: truncated(512).optional(),
-  /** Start of the body of an error response (status >= 400), when the app opted in. */
+  /**
+   * Full URL as called, when the app opted in: real path and query string,
+   * user info and fragment dropped, credential-like query values redacted.
+   * `host` and `path` (templated) stay the grouping keys.
+   */
+  url: truncated(LIMITS.maxUrlLength).optional(),
+  /** `Content-Type` of the response, e.g. "application/json; charset=utf-8". */
+  contentType: truncated(128).optional(),
+  /** Redacted start of the response body, when the app opted in (errors only or every response). */
   responseBody: truncated(LIMITS.maxResponseBodyLength).optional(),
   routeName: truncated(256).optional(),
   /** Connection type reported by the native layer: wifi, cellular, ethernet... */
