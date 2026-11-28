@@ -3,6 +3,32 @@
 All notable changes to `@mobile-observability/react-native`. Each section is
 also published as the GitHub release for its `react-native-v<version>` tag.
 
+## 0.4.0
+
+### Added
+
+- **What the API answered, on every request (opt-in).**
+  `networkResponseBodies: 'all'` keeps the start of the body (4 KB) of every
+  response that arrived, not only errors, so the dashboard shows APIs that
+  answer `200` with `{ "status": false, "message": "..." }`. `'errors'` keeps
+  error bodies only (same as `networkErrorBodiesEnabled: true`), `'off'` is the
+  default. Credential-like keys are redacted on device as before; event
+  streams and responses announced over 1 MB are never read.
+- **The URL as called (opt-in).** `networkFullUrls: true` sends the full URL
+  of each request: real path and query string, with user info and fragment
+  dropped and credential-like query values (`token`, `pin`, `otp`...)
+  redacted. The templated path still groups endpoints.
+- **Response content type** on every request that got an answer.
+
+### Fixed
+
+- **Metro dev server traffic is no longer recorded.** In a development build,
+  LogBox symbolication (`/symbolicate`), logs and HMR requests to the dev
+  server showed up as the app's requests; requests to the bundle's origin and
+  Metro-only endpoints are now ignored.
+- `fetch` called with a `URL` from another URL implementation (polyfills) is
+  tracked instead of skipped.
+
 ## 0.3.0
 
 ### Added

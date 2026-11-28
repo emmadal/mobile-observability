@@ -3,6 +3,24 @@
 All notable changes to `@mobile-observability/protocol`. Each section is also
 published as the GitHub release for its `protocol-v<version>` tag.
 
+## 0.4.0
+
+### Added
+
+- Request items accept two optional fields:
+  - `url`: the full URL as called (real path and query string, user info and
+    fragment dropped, credential-like query values redacted by the SDK), up to
+    `LIMITS.maxUrlLength` (2048) characters. `host` and the templated `path`
+    stay the grouping keys.
+  - `contentType`: the response `Content-Type`, up to 128 characters.
+- `responseBody` may now carry the body of any response the app opted in for
+  (not only errors), and `LIMITS.maxResponseBodyLength` is 4096 characters.
+
+### Compatibility
+
+- Additive only: 0.3 envelopes still validate, and the schema version stays
+  `1`. Older servers strip the new fields and cut bodies at 2048 characters.
+
 ## 0.3.0
 
 ### Added
