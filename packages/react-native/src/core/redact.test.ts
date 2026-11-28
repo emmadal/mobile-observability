@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isSensitiveKey, redactSensitive, sanitizeResponseBody } from './redact';
+import { isSensitiveKey, redactSensitive, redactUrl, sanitizeResponseBody } from './redact';
 
 describe('redactSensitive', () => {
   it('redacts credential-shaped keys without touching the rest', () => {
@@ -100,5 +100,32 @@ describe('sanitizeResponseBody', () => {
     );
     expect(sanitizeResponseBody('x'.repeat(50), 10)).toBe('x'.repeat(10));
     expect(sanitizeResponseBody('   ', 10)).toBeUndefined();
+  });
+});
+
+describe('redactUrl', () => {
+  it('keeps the URL as called but drops user info, fragment and credential values', () => {
+    expect(
+      redactUrl(
+        'https://me:secret@api.example.com/kya/agents/231770000001?msisdn=231770000001&OTP=1234&access%5Ftoken=t&flag#frag',
+        2048,
+      ),
+    ).toBe(
+      'https://api.example.com/kya/agents/231770000001?msisdn=231770000001&OTP=[redacted]&access%5Ftoken=[redacted]&flag',
+    );
+  });
+
+  it('leaves URLs without a query alone and cuts long ones', () => {
+    expect(redactUrl('https://api.example.com/a/b', 2048)).toBe('https://api.example.com/a/b');
+    expect(redactUrl(`https://api.example.com/?q=${'x'.repeat(100)}`, 30)).toHaveLength(30);
+  });
+});
+
+describe('sanitizeResponseBody on large bodies', () => {
+  it('scans only a bounded window of a body too long to parse', () => {
+    const huge = `{"token":"abc","rows":[${'1,'.repeat(100_000)}1]}`;
+    const body = sanitizeResponseBody(huge, 100);
+    expect(body).toHaveLength(100);
+    expect(body).toContain('"token":"[redacted]"');
   });
 });

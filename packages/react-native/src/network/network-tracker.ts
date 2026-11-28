@@ -1,6 +1,6 @@
 import { LIMITS, sanitizeUrl } from '@mobile-observability/protocol';
 import { traceId, traceparent } from '../core/ids';
-import { sanitizeResponseBody } from '../core/redact';
+import { redactUrl, sanitizeResponseBody } from '../core/redact';
 
 export interface CompletedRequest {
   method: string;
@@ -16,7 +16,11 @@ export interface CompletedRequest {
   error?: string;
   /** The platform's or the JS error's own message for that failure. */
   errorMessage?: string;
-  /** Redacted start of an error response body (opt-in). */
+  /** Full URL as called, credential-like query values redacted (opt-in). */
+  url?: string;
+  /** `Content-Type` of the response. */
+  contentType?: string;
+  /** Redacted start of the response body (opt-in: errors only, or every response). */
   responseBody?: string;
   /** W3C trace id propagated to the backend in the `traceparent` header. */
   traceId?: string;
@@ -56,20 +60,33 @@ const MAX_ERROR_MESSAGE = 512;
 /** An error body still streaming after this long is recorded without it. */
 const BODY_READ_TIMEOUT_MS = 2_000;
 const TEXT_CONTENT_TYPE = /json|text|xml|html|x-www-form-urlencoded/i;
+/** Server-sent events never end: their body is not something to read. */
+const STREAM_CONTENT_TYPE = /event-stream/i;
+/** A fetch response announced larger than this is not cloned and read. */
+const MAX_BODY_READ_BYTES = 1024 * 1024;
+
+/** Which responses keep their redacted body. */
+export type ResponseBodyCapture = 'off' | 'errors' | 'all';
 
 export interface NetworkTrackerOptions {
   now: () => number;
   shouldIgnore: (url: string) => boolean;
   onRequest: (request: CompletedRequest) => void;
-  /** Keep the redacted start of error response bodies (status >= 400). */
-  captureErrorBodies?: boolean;
+  /**
+   * Keep the redacted start of response bodies: never, only for errors
+   * (status >= 400), or for every response that arrived (default 'off').
+   */
+  responseBodies?: ResponseBodyCapture;
+  /** Keep the full URL as called, credential-like query values redacted. */
+  fullUrls?: boolean;
 }
 
 /**
  * Patches XMLHttpRequest (React Native's fetch is built on it) to record
  * method, sanitized URL, status, duration and sizes (AC-5). Request bodies and
- * headers are never read; a failed request keeps its failure message, and an
- * error response its redacted body only when `captureErrorBodies` is on.
+ * headers are never read; a failed request keeps its failure message. With
+ * `responseBodies` a response keeps its redacted body, and with `fullUrls` the
+ * URL as called (credential-like query values redacted).
  */
 export class NetworkTracker {
   private readonly recent: CompletedRequest[] = [];
@@ -144,8 +161,8 @@ export class NetworkTracker {
     if (!original || (original as { polyfill?: boolean }).polyfill || this.restoreFetch) return;
     const tracker = this;
     const wrapped = async function trackedFetch(input: RequestInfo | URL, init?: RequestInit) {
-      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
-      if (tracker.options.shouldIgnore(url)) return original(input, init);
+      const url = requestUrl(input);
+      if (url === undefined || tracker.options.shouldIgnore(url)) return original(input, init);
       const method = (
         init?.method ?? (typeof input === 'object' && 'method' in input ? input.method : 'GET')
       ).toUpperCase();
@@ -162,6 +179,7 @@ export class NetworkTracker {
         const message = errorMessageOf(error);
         tracker.record({
           ...sanitizeUrl(url),
+          ...tracker.fullUrl(url),
           method,
           statusCode: 0,
           startedAt,
@@ -174,9 +192,11 @@ export class NetworkTracker {
         throw error;
       }
       const length = Number(response.headers?.get?.('content-length') ?? Number.NaN);
+      const contentType = readFetchHeader(response, 'content-type');
       const now = tracker.options.now();
       const request: CompletedRequest = {
         ...sanitizeUrl(url),
+        ...tracker.fullUrl(url),
         method,
         statusCode: response.status,
         startedAt,
@@ -185,13 +205,24 @@ export class NetworkTracker {
         timeToFirstByteMs: Math.max(0, now - startedAt),
         ...(Number.isFinite(length) ? { bytesReceived: length } : {}),
         ...(bytesSent !== undefined ? { bytesSent } : {}),
+        ...(contentType ? { contentType } : {}),
         traceId: id,
       };
-      if (tracker.options.captureErrorBodies && response.status >= 400) {
+      if (
+        tracker.keepsBody(response.status) &&
+        isReadableBody(contentType) &&
+        !(Number.isFinite(length) && length > MAX_BODY_READ_BYTES)
+      ) {
         // The clone is taken before the app sees the response; the app is not
-        // kept waiting while the error body is read.
-        void readFetchBody(response).then((body) =>
-          tracker.record(body ? { ...request, responseBody: body } : request),
+        // kept waiting while the body is read.
+        void readFetchBody(response).then(({ body, length: read }) =>
+          tracker.record({
+            ...request,
+            ...(body ? { responseBody: body } : {}),
+            ...(request.bytesReceived === undefined && read !== undefined
+              ? { bytesReceived: read }
+              : {}),
+          }),
         );
       } else {
         tracker.record(request);
@@ -209,6 +240,19 @@ export class NetworkTracker {
     this.restore = null;
     this.restoreFetch?.();
     this.restoreFetch = null;
+  }
+
+  /** Whether a response with this status keeps its body under the configured mode. */
+  keepsBody(statusCode: number): boolean {
+    const mode = this.options.responseBodies ?? 'off';
+    if (mode === 'all') return statusCode > 0;
+    if (mode === 'errors') return statusCode >= 400;
+    return false;
+  }
+
+  /** `{ url }` with the redacted full URL when full URLs are on, `{}` otherwise. */
+  fullUrl(url: string): { url?: string } {
+    return this.options.fullUrls ? { url: redactUrl(url, LIMITS.maxUrlLength) } : {};
   }
 
   /** Summary of requests that finished in [from, to], for time-to-interactive params. */
@@ -253,12 +297,14 @@ export class NetworkTracker {
     const { host, path } = sanitizeUrl(state.url);
     const statusCode = state.error ? 0 : xhr.status;
     const errorMessage = state.error ? readXhrFailure(xhr) : undefined;
+    const contentType = statusCode > 0 ? readXhrHeader(xhr, 'content-type') : undefined;
     const responseBody =
-      this.options.captureErrorBodies && statusCode >= 400 ? readXhrBody(xhr) : undefined;
+      this.keepsBody(statusCode) && isReadableBody(contentType) ? readXhrBody(xhr) : undefined;
     const request: CompletedRequest = {
       method: state.method.toUpperCase(),
       host,
       path,
+      ...this.fullUrl(state.url),
       statusCode,
       startedAt: state.startedAt,
       durationMs: Math.max(0, now - state.startedAt),
@@ -269,6 +315,7 @@ export class NetworkTracker {
         : {}),
       ...(state.error ? { error: state.error } : {}),
       ...(errorMessage ? { errorMessage } : {}),
+      ...(contentType ? { contentType } : {}),
       ...(responseBody ? { responseBody } : {}),
       ...(state.traceId ? { traceId: state.traceId } : {}),
     };
@@ -340,14 +387,44 @@ function readXhrFailure(xhr: XMLHttpRequest): string | undefined {
   }
 }
 
-function isTextContent(contentType: string | null | undefined): boolean {
-  return !contentType || TEXT_CONTENT_TYPE.test(contentType);
+/** Text-like and not a never-ending event stream: worth reading. */
+function isReadableBody(contentType: string | null | undefined): boolean {
+  if (!contentType) return true;
+  return TEXT_CONTENT_TYPE.test(contentType) && !STREAM_CONTENT_TYPE.test(contentType);
 }
 
-/** Error body of a finished XHR when it is text or parsed JSON; blobs are skipped. */
+/** The request's URL whatever its form: string, URL (any polyfill) or Request. */
+function requestUrl(input: unknown): string | undefined {
+  if (typeof input === 'string') return input;
+  if (input && typeof input === 'object') {
+    const { href, url } = input as { href?: unknown; url?: unknown };
+    if (typeof href === 'string') return href;
+    if (typeof url === 'string') return url;
+    const text = String(input);
+    return text.startsWith('[object') ? undefined : text;
+  }
+  return undefined;
+}
+
+function readXhrHeader(xhr: XMLHttpRequest, name: string): string | undefined {
+  try {
+    return xhr.getResponseHeader(name)?.trim().slice(0, 128) || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function readFetchHeader(response: Response, name: string): string | undefined {
+  try {
+    return response.headers?.get?.(name)?.trim().slice(0, 128) || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Body of a finished XHR when it is text or parsed JSON; blobs are skipped. */
 function readXhrBody(xhr: XMLHttpRequest): string | undefined {
   try {
-    if (!isTextContent(xhr.getResponseHeader('content-type'))) return undefined;
     if (xhr.responseType === '' || xhr.responseType === 'text') {
       const text = xhr.responseText;
       return typeof text === 'string'
@@ -363,25 +440,38 @@ function readXhrBody(xhr: XMLHttpRequest): string | undefined {
   return undefined;
 }
 
-/** Reads a clone of an error response; undefined when not text, unreadable or too slow. */
-function readFetchBody(response: Response): Promise<string | undefined> {
+interface ReadBody {
+  /** Redacted start of the body. */
+  body?: string;
+  /** Characters read, when the body was read to the end. */
+  length?: number;
+}
+
+/** Reads a clone of a response; empty when unreadable or too slow. */
+function readFetchBody(response: Response): Promise<ReadBody> {
   let clone: Response;
   try {
-    if (!isTextContent(response.headers?.get?.('content-type'))) {
-      return Promise.resolve(undefined);
-    }
     clone = response.clone();
   } catch {
-    return Promise.resolve(undefined);
+    return Promise.resolve({});
   }
   let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<undefined>((resolve) => {
-    timer = setTimeout(() => resolve(undefined), BODY_READ_TIMEOUT_MS);
+  const timeout = new Promise<ReadBody>((resolve) => {
+    timer = setTimeout(() => {
+      // Stop buffering the abandoned branch of the tee.
+      void clone.body?.cancel?.().catch(() => {});
+      resolve({});
+    }, BODY_READ_TIMEOUT_MS);
   });
   const read = clone
     .text()
-    .then((text) => sanitizeResponseBody(text, LIMITS.maxResponseBodyLength))
-    .catch(() => undefined);
+    .then(
+      (text): ReadBody => ({
+        body: sanitizeResponseBody(text, LIMITS.maxResponseBodyLength),
+        length: text.length,
+      }),
+    )
+    .catch((): ReadBody => ({}));
   return Promise.race([read, timeout]).finally(() => clearTimeout(timer));
 }
 

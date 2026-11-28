@@ -1,4 +1,4 @@
-import { AppState, Platform } from 'react-native';
+import { AppState, NativeModules, Platform, TurboModuleRegistry } from 'react-native';
 import type { PlatformAdapter, UpdatesInfo } from '../core/platform';
 import { createNativeBridge } from '../native/native-bridge';
 import type { NativeAppInfo } from '../native/types';
@@ -52,8 +52,40 @@ type UpdatesModule = {
 };
 
 type ConstantsModule = {
-  default?: { expoConfig?: { version?: string; extra?: { observability?: ObserveConfig } } };
+  default?: {
+    expoConfig?: {
+      version?: string;
+      /** Dev server host of a development build, e.g. "192.168.1.2:8081". */
+      hostUri?: string;
+      extra?: { observability?: ObserveConfig };
+    };
+  };
 };
+
+type SourceCodeModule = {
+  scriptURL?: unknown;
+  getConstants?: () => { scriptURL?: unknown };
+};
+
+/** "http://192.168.1.2:8081" from "http://192.168.1.2:8081/index.bundle?platform=ios". */
+export function httpOrigin(url: string): string | null {
+  const match = /^(https?:\/\/[^/?#]+)/i.exec(url);
+  return match?.[1]?.toLowerCase() ?? null;
+}
+
+/** Metro's origin, from the bundle URL or Expo's dev host; null for an embedded bundle. */
+function readDevServerOrigin(): string | null {
+  const scriptURL = safely(() => {
+    const sourceCode =
+      (TurboModuleRegistry.get('SourceCode') as SourceCodeModule | null) ??
+      (NativeModules.SourceCode as SourceCodeModule | undefined);
+    return sourceCode?.getConstants?.().scriptURL ?? sourceCode?.scriptURL;
+  });
+  const fromBundle = typeof scriptURL === 'string' ? httpOrigin(scriptURL) : null;
+  if (fromBundle) return fromBundle;
+  const hostUri = safely(() => constantsModule?.default?.expoConfig?.hostUri);
+  return typeof hostUri === 'string' && hostUri ? httpOrigin(`http://${hostUri}`) : null;
+}
 
 // Optional peers. Metro only treats a require as optional when it sits directly in a try block.
 let updatesModule: UpdatesModule | null = null;
@@ -191,5 +223,6 @@ export function createReactNativePlatform(): PlatformAdapter {
     warn: (message) => console.warn(message),
     XMLHttpRequest: runtime.XMLHttpRequest,
     fetchTarget: globalThis,
+    devServerOrigin: () => (__DEV__ ? readDevServerOrigin() : null),
   };
 }

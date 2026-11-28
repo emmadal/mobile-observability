@@ -4,10 +4,15 @@ import {
   INGEST_PATHS,
   type ItemInput,
   type MetricName,
+  sanitizeUrl,
 } from '@mobile-observability/protocol';
 import { normalizeError } from '../errors/normalize';
 import type { DeviceStateSnapshot } from '../native/types';
-import { type CompletedRequest, NetworkTracker } from '../network/network-tracker';
+import {
+  type CompletedRequest,
+  NetworkTracker,
+  type ResponseBodyCapture,
+} from '../network/network-tracker';
 import {
   type FocusedRoute,
   type NavigationRefLike,
@@ -36,7 +41,7 @@ import type { AppStateStatus, PlatformAdapter } from './platform';
 import { redactSensitive } from './redact';
 import { type CrashContext, convertPendingReport, type JsFatalReport } from './reports';
 
-export const SDK_INFO = { name: '@mobile-observability/react-native', version: '0.3.0' } as const;
+export const SDK_INFO = { name: '@mobile-observability/react-native', version: '0.4.0' } as const;
 
 const DEFAULTS = {
   sampleRate: 1,
@@ -48,6 +53,7 @@ const DEFAULTS = {
   resourceSampleIntervalMs: 300_000,
   networkTrackingEnabled: true,
   networkErrorBodiesEnabled: false,
+  networkFullUrls: false,
   sessionTimeoutMs: 30_000,
   flushIntervalMs: 10_000,
   flushAtItems: 50,
@@ -192,11 +198,10 @@ export class ObservabilityClient {
       );
     }
     if (config.networkTrackingEnabled)
-      this.installNetworkTracking(
-        config.endpoint,
-        config.ignoreUrls ?? [],
-        config.networkErrorBodiesEnabled,
-      );
+      this.installNetworkTracking(config.endpoint, config.ignoreUrls ?? [], {
+        responseBodies: responseBodyMode(config),
+        fullUrls: config.networkFullUrls === true,
+      });
 
     this.cleanups.push(this.platform.appState.subscribe((state) => this.onAppStateChange(state)));
     if (config.hangTrackingEnabled) this.installHangWatchdog(config.hangThresholdMs);
@@ -492,19 +497,24 @@ export class ObservabilityClient {
   private installNetworkTracking(
     endpoint: string,
     ignoreUrls: (string | RegExp)[],
-    captureErrorBodies: boolean,
+    capture: { responseBodies: ResponseBodyCapture; fullUrls: boolean },
   ): void {
     const ingestBase = endpoint.replace(/\/+$/, '');
     const ownPaths = Object.values(INGEST_PATHS).map((path) => `${ingestBase}${path}`);
+    // In a dev bundle, Metro's own traffic (symbolication, logs, HMR) is not the app's.
+    const devServer = this.platform.isDevBundle
+      ? safeCall(() => this.platform.devServerOrigin?.() ?? null, null)
+      : null;
     this.network = new NetworkTracker({
       now: () => this.platform.now(),
       shouldIgnore: (url) =>
         ownPaths.some((own) => url.startsWith(own)) ||
+        (this.platform.isDevBundle && isDevServerRequest(url, devServer)) ||
         ignoreUrls.some((pattern) =>
           typeof pattern === 'string' ? url.includes(pattern) : pattern.test(url),
         ),
       onRequest: (request) => this.onRequest(request),
-      captureErrorBodies,
+      ...capture,
     });
     this.network.install(this.platform.XMLHttpRequest);
     if (this.platform.fetchTarget) this.network.installFetch(this.platform.fetchTarget);
@@ -530,6 +540,8 @@ export class ObservabilityClient {
       ...(request.traceId ? { traceId: request.traceId } : {}),
       ...(request.error ? { error: request.error } : {}),
       ...(request.errorMessage ? { errorMessage: request.errorMessage } : {}),
+      ...(request.url ? { url: request.url } : {}),
+      ...(request.contentType ? { contentType: request.contentType } : {}),
       ...(request.responseBody ? { responseBody: request.responseBody } : {}),
       ...(route ? { routeName: route.routeName } : {}),
       ...(this.platform.native.isAvailable
@@ -786,4 +798,29 @@ function safeParseId(raw: string): string | null {
   } catch {
     return null;
   }
+}
+
+/** `networkResponseBodies`, or the older `networkErrorBodiesEnabled` flag. */
+function responseBodyMode(config: ObserveConfig): ResponseBodyCapture {
+  const mode = config.networkResponseBodies;
+  if (mode === 'off' || mode === 'errors' || mode === 'all') return mode;
+  return config.networkErrorBodiesEnabled ? 'errors' : 'off';
+}
+
+/** Metro endpoints only a dev server serves, whatever host it was reached on. */
+const METRO_ONLY_PATHS = new Set(['/symbolicate', '/open-stack-frame']);
+
+/**
+ * A request to the Metro dev server (LogBox symbolication, logs, HMR): same
+ * origin as the bundle, or a Metro-only endpoint when the origin is unknown.
+ */
+export function isDevServerRequest(url: string, devServerOrigin: string | null): boolean {
+  const lower = url.toLowerCase();
+  if (devServerOrigin) {
+    const origin = devServerOrigin.toLowerCase().replace(/\/+$/, '');
+    if (lower === origin || lower.startsWith(`${origin}/`) || lower.startsWith(`${origin}?`)) {
+      return true;
+    }
+  }
+  return METRO_ONLY_PATHS.has(sanitizeUrl(url).path);
 }

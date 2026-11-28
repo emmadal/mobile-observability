@@ -79,15 +79,18 @@ function redactText(text: string): string {
 const MAX_PARSED_BODY = 64 * 1024;
 
 /**
- * Error response body as sent to the server: JSON is re-serialized with
+ * Response body as sent to the server: JSON is re-serialized with
  * sensitive keys redacted at every level; other text has its JSON-like,
  * form-encoded and XML key/value pairs redacted with the same key test. The
  * result is cut to `maxLength`. Undefined for an empty body.
  */
 export function sanitizeResponseBody(text: string, maxLength: number): string | undefined {
-  const trimmed = text.trim();
+  // A body too long to parse is only ever scanned through a bounded window, so
+  // a large success response costs no more than a small one.
+  const parseable = text.length <= MAX_PARSED_BODY;
+  const trimmed = (parseable ? text : text.slice(0, maxLength * 2 + 1024)).trim();
   if (!trimmed) return undefined;
-  if (trimmed.length <= MAX_PARSED_BODY && (trimmed.startsWith('{') || trimmed.startsWith('['))) {
+  if (parseable && (trimmed.startsWith('{') || trimmed.startsWith('['))) {
     try {
       return JSON.stringify(redactDeep(JSON.parse(trimmed))).slice(0, maxLength);
     } catch {
@@ -96,4 +99,38 @@ export function sanitizeResponseBody(text: string, maxLength: number): string | 
   }
   // Only the kept prefix (with room for a value cut at the edge) is scanned.
   return redactText(trimmed.slice(0, maxLength * 2)).slice(0, maxLength);
+}
+
+const URL_PREFIX = /^([a-z][a-z0-9+.-]*:\/\/)([^/?#]*@)?/i;
+
+/**
+ * Full URL as sent to the server: user info and fragment dropped, and the
+ * value of every query parameter whose key looks like a credential (`token`,
+ * `pin`, `otp`, `password`...) redacted with the same key test as bodies.
+ * The path is kept as called. Cut to `maxLength`.
+ */
+export function redactUrl(url: string, maxLength: number): string {
+  const withoutFragment = url.split('#', 1)[0] ?? '';
+  const withoutUser = withoutFragment.replace(URL_PREFIX, '$1');
+  const queryStart = withoutUser.indexOf('?');
+  if (queryStart === -1) return withoutUser.slice(0, maxLength);
+  const query = withoutUser
+    .slice(queryStart + 1)
+    .split('&')
+    .map((pair) => {
+      const separator = pair.indexOf('=');
+      if (separator === -1) return pair;
+      const rawKey = pair.slice(0, separator);
+      return isSensitiveKey(decodeQueryKey(rawKey)) ? `${rawKey}=${REDACTED}` : pair;
+    })
+    .join('&');
+  return `${withoutUser.slice(0, queryStart)}?${query}`.slice(0, maxLength);
+}
+
+function decodeQueryKey(key: string): string {
+  try {
+    return decodeURIComponent(key.replace(/\+/g, ' '));
+  } catch {
+    return key;
+  }
 }

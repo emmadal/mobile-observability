@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
-import { type CompletedRequest, NetworkTracker } from './network-tracker';
+import {
+  type CompletedRequest,
+  NetworkTracker,
+  type NetworkTrackerOptions,
+  type ResponseBodyCapture,
+} from './network-tracker';
 
 type Listener = () => void;
 
@@ -49,14 +54,19 @@ class FakeXhr {
   }
 }
 
-function setup(ignore: (url: string) => boolean = () => false, captureErrorBodies = false) {
+function setup(
+  ignore: (url: string) => boolean = () => false,
+  responseBodies: ResponseBodyCapture = 'off',
+  extra: Partial<NetworkTrackerOptions> = {},
+) {
   const clock = { now: 1_000 };
   const requests: CompletedRequest[] = [];
   const tracker = new NetworkTracker({
     now: () => clock.now,
     shouldIgnore: ignore,
     onRequest: (r) => requests.push(r),
-    captureErrorBodies,
+    responseBodies,
+    ...extra,
   });
   const Xhr = class extends FakeXhr {};
   tracker.install(Xhr as unknown as typeof XMLHttpRequest);
@@ -123,7 +133,7 @@ describe('NetworkTracker (AC-5)', () => {
     expect(requests[1]).toMatchObject({ error: 'timeout', errorMessage: 'The request timed out.' });
   });
 
-  it('never reads response bodies unless error bodies are enabled', () => {
+  it('never reads response bodies unless response bodies are enabled', () => {
     const { requests, request } = setup();
     request('POST', 'https://api.example.com/login').respond(
       401,
@@ -134,8 +144,8 @@ describe('NetworkTracker (AC-5)', () => {
     expect(requests[0]).not.toHaveProperty('responseBody');
   });
 
-  it('keeps the redacted body of error responses when enabled, never of successes', () => {
-    const { requests, request } = setup(() => false, true);
+  it('keeps the redacted body of error responses in errors mode, never of successes', () => {
+    const { requests, request } = setup(() => false, 'errors');
     request('POST', 'https://api.example.com/login').respond(
       401,
       { 'content-type': 'application/json' },
@@ -161,11 +171,54 @@ describe('NetworkTracker (AC-5)', () => {
   });
 
   it('serializes JSON-typed XHR error responses', () => {
-    const { requests, request } = setup(() => false, true);
+    const { requests, request } = setup(() => false, 'errors');
     const xhr = request('GET', 'https://api.example.com/x');
     xhr.responseType = 'json';
     xhr.respond(422, {}, '{"errors":{"msisdn":"invalid"}}');
     expect(requests[0]?.responseBody).toBe('{"errors":{"msisdn":"invalid"}}');
+  });
+
+  it('keeps the body of every answered response in all mode, with its content type', () => {
+    const { requests, request } = setup(() => false, 'all');
+    request('POST', 'https://api.example.com/merchant/create').respond(
+      200,
+      { 'content-type': 'application/json; charset=utf-8' },
+      '{"status":false,"message":"QR code already assigned","otp":"4321"}',
+    );
+    request('GET', 'https://api.example.com/events').respond(
+      200,
+      { 'content-type': 'text/event-stream' },
+      'data: hello',
+    );
+    request('GET', 'https://api.example.com/down').fail('error', 'Network request failed');
+    expect(requests[0]).toMatchObject({
+      statusCode: 200,
+      contentType: 'application/json; charset=utf-8',
+      responseBody: '{"status":false,"message":"QR code already assigned","otp":"[redacted]"}',
+    });
+    // Event streams never end and failures have no answer: no body.
+    expect(requests[1]).not.toHaveProperty('responseBody');
+    expect(requests[2]).not.toHaveProperty('responseBody');
+    expect(requests[2]).not.toHaveProperty('contentType');
+  });
+
+  it('keeps the full URL as called only when full URLs are on, credentials redacted', () => {
+    const off = setup();
+    off
+      .request('GET', 'https://api.example.com/users/231770000001?msisdn=231770000001')
+      .respond(200);
+    expect(off.requests[0]).not.toHaveProperty('url');
+
+    const { requests, request } = setup(() => false, 'off', { fullUrls: true });
+    request(
+      'GET',
+      'https://user:pw@api.example.com/users/231770000001/orders?msisdn=231770000001&access_token=abc&pin=1234#top',
+    ).respond(200);
+    expect(requests[0]).toMatchObject({
+      host: 'api.example.com',
+      path: '/users/:id/orders',
+      url: 'https://api.example.com/users/231770000001/orders?msisdn=231770000001&access_token=[redacted]&pin=[redacted]',
+    });
   });
 
   it('ignores URLs the predicate excludes (own endpoint, ignoreUrls)', () => {
@@ -196,14 +249,19 @@ describe('NetworkTracker (AC-5)', () => {
 });
 
 describe('NetworkTracker fetch wrapping', () => {
-  function setupFetch(impl: typeof fetch, captureErrorBodies = false) {
+  function setupFetch(
+    impl: typeof fetch,
+    responseBodies: ResponseBodyCapture = 'off',
+    fullUrls = false,
+  ) {
     const clock = { now: 1_000 };
     const requests: CompletedRequest[] = [];
     const tracker = new NetworkTracker({
       now: () => clock.now,
       shouldIgnore: (url) => url.includes('/api/v1/'),
       onRequest: (request) => requests.push(request),
-      captureErrorBodies,
+      responseBodies,
+      fullUrls,
     });
     const target: { fetch?: typeof fetch } = { fetch: impl };
     tracker.installFetch(target);
@@ -270,7 +328,7 @@ describe('NetworkTracker fetch wrapping', () => {
           status: 404,
           headers: { 'content-type': 'application/json' },
         }),
-      true,
+      'errors',
     );
     const response = await target.fetch?.('https://api.example.com/agents/7');
     expect(await response?.json()).toEqual({ message: 'Agent not found', token: 't' });
@@ -287,7 +345,7 @@ describe('NetworkTracker fetch wrapping', () => {
       const stalled = new ReadableStream<Uint8Array>({ start() {} });
       const { requests, target } = setupFetch(
         async () => new Response(stalled, { status: 503 }),
-        true,
+        'errors',
       );
       await target.fetch?.('https://api.example.com/stream');
       expect(requests).toHaveLength(0);
@@ -298,6 +356,57 @@ describe('NetworkTracker fetch wrapping', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('reads the body of successful fetch responses in all mode, leaving the app its copy', async () => {
+    const payload = '{"status":"FAILED","message":"Insufficient balance","data":{"pin":"0000"}}';
+    const { requests, target } = setupFetch(
+      async () =>
+        new Response(payload, { status: 200, headers: { 'content-type': 'application/json' } }),
+      'all',
+      true,
+    );
+    const response = await target.fetch?.(
+      new URL('https://api.example.com/SmallMerchant/create?lang=en&token=x'),
+      { method: 'POST', body: '{"datas":[]}' },
+    );
+    expect(await response?.json()).toEqual(JSON.parse(payload));
+    await vi.waitFor(() => expect(requests).toHaveLength(1));
+    expect(requests[0]).toMatchObject({
+      method: 'POST',
+      statusCode: 200,
+      url: 'https://api.example.com/SmallMerchant/create?lang=en&token=[redacted]',
+      contentType: 'application/json',
+      bytesReceived: payload.length,
+      responseBody:
+        '{"status":"FAILED","message":"Insufficient balance","data":{"pin":"[redacted]"}}',
+    });
+  });
+
+  it('does not clone event streams or responses announced over 1 MB', async () => {
+    const clone = vi.fn();
+    const make = (headers: Record<string, string>) => {
+      const response = new Response('x', { status: 200, headers });
+      response.clone = clone;
+      return response;
+    };
+    const stream = setupFetch(async () => make({ 'content-type': 'text/event-stream' }), 'all');
+    await stream.target.fetch?.('https://api.example.com/sse');
+    const big = setupFetch(
+      async () => make({ 'content-type': 'application/json', 'content-length': '5000000' }),
+      'all',
+    );
+    await big.target.fetch?.('https://api.example.com/export');
+    expect(clone).not.toHaveBeenCalled();
+    expect(stream.requests).toHaveLength(1);
+    expect(big.requests[0]).toMatchObject({ statusCode: 200, bytesReceived: 5_000_000 });
+  });
+
+  it('tracks a URL object from any URL implementation', async () => {
+    const { requests, target } = setupFetch(async () => new Response(null, { status: 204 }));
+    const foreignUrl = { href: 'https://api.example.com/kyc/subscribers/42', toString: () => '' };
+    await target.fetch?.(foreignUrl as unknown as URL);
+    expect(requests[0]).toMatchObject({ host: 'api.example.com', path: '/kyc/subscribers/:id' });
   });
 
   it('skips ignored URLs and the XHR-based polyfill', async () => {

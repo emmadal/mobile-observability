@@ -101,6 +101,77 @@ describe('SDK to protocol contract', () => {
     );
   });
 
+  it('sends the full URL, content type and success body when the app opts in', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    const platform = createFakePlatform({
+      native: createNativeLikeBridge(null),
+      fetchTarget: {
+        fetch: async () =>
+          new Response('{"status":false,"message":"Subscriber not found"}', {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          }),
+      },
+    });
+    const client = new ObservabilityClient(platform);
+    client.configure({
+      apiKey: 'pk_test',
+      endpoint: 'https://obs.example.com',
+      networkResponseBodies: 'all',
+      networkFullUrls: true,
+    });
+    await flushMicrotasks();
+    await platform.fetchTarget?.fetch?.('https://api.example.com/kyc/check?msisdn=231770000001');
+    await vi.waitFor(async () => {
+      await client.flush();
+      expect(platform.sent.flatMap((envelope) => envelope.items)).toContainEqual(
+        expect.objectContaining({ type: 'request' }),
+      );
+    });
+    client.close();
+    for (const envelope of platform.sent) {
+      const parsed = parseEnvelope(envelope);
+      expect(parsed.ok ? [] : parsed.issues).toEqual([]);
+    }
+    const request = platform.sent
+      .flatMap((envelope) => envelope.items)
+      .find((item) => item.type === 'request');
+    expect(request).toMatchObject({
+      statusCode: 200,
+      url: 'https://api.example.com/kyc/check?msisdn=231770000001',
+      contentType: 'application/json',
+      responseBody: '{"status":false,"message":"Subscriber not found"}',
+    });
+  });
+
+  it('never records Metro dev server traffic from a dev bundle', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    const platform = createFakePlatform({
+      native: createNativeLikeBridge(null),
+      isDevBundle: true,
+      devServerOrigin: () => 'http://192.168.1.2:8081',
+      fetchTarget: { fetch: async () => new Response('{}', { status: 200 }) },
+    });
+    const client = new ObservabilityClient(platform);
+    client.configure({
+      apiKey: 'pk_test',
+      endpoint: 'https://obs.example.com',
+      dispatchInDebug: true,
+    });
+    await flushMicrotasks();
+    const send = platform.fetchTarget?.fetch;
+    await send?.('http://192.168.1.2:8081/symbolicate', { method: 'POST', body: '{}' });
+    await send?.('http://192.168.1.2:8081/logs', { method: 'POST', body: '{}' });
+    await send?.('http://10.0.2.2:8081/symbolicate', { method: 'POST', body: '{}' });
+    await send?.('https://api.example.com/merchant/home');
+    await client.flush();
+    client.close();
+    const paths = platform.sent
+      .flatMap((envelope) => envelope.items)
+      .flatMap((item) => (item.type === 'request' ? [`${item.host}${item.path}`] : []));
+    expect(paths).toEqual(['api.example.com/merchant/home']);
+  });
+
   it('opens an offline window when the app starts offline', async () => {
     const { client, platform } = await scenario({ networkConnected: false });
     await client.flush();

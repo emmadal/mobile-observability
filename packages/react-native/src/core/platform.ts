@@ -35,4 +35,6 @@ export interface PlatformAdapter {
   XMLHttpRequest?: typeof XMLHttpRequest;
   /** Object whose `fetch` is wrapped (globalThis in the app). */
   fetchTarget?: { fetch?: typeof fetch };
+  /** Origin of the Metro dev server the bundle came from (dev bundles), e.g. http://192.168.1.2:8081. */
+  devServerOrigin?(): string | null;
 }

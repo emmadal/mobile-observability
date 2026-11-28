@@ -8,7 +8,7 @@ import {
 } from '../__tests__/helpers';
 import type { NativeBridge } from '../native/types';
 import type { ObserveConfig } from '../types';
-import { ObservabilityClient } from './client';
+import { isDevServerRequest, ObservabilityClient } from './client';
 
 const BASE: ObserveConfig = { apiKey: 'pk_test', endpoint: 'https://obs.example.com' };
 
@@ -367,5 +367,18 @@ describe('ObservabilityClient sessions, events and TTI', () => {
       params: { url: '/products/3', isAppLaunch: false },
     });
     client.close();
+  });
+});
+
+describe('isDevServerRequest', () => {
+  it('matches the bundle origin and Metro-only endpoints, not the app API', () => {
+    const origin = 'http://192.168.1.2:8081';
+    expect(isDevServerRequest('http://192.168.1.2:8081/symbolicate', origin)).toBe(true);
+    expect(isDevServerRequest('http://192.168.1.2:8081/logs', origin)).toBe(true);
+    expect(isDevServerRequest('HTTP://192.168.1.2:8081/hot?bundleEntry=x', origin)).toBe(true);
+    expect(isDevServerRequest('http://192.168.1.2:80810/x', origin)).toBe(false);
+    expect(isDevServerRequest('http://localhost:8081/symbolicate', null)).toBe(true);
+    expect(isDevServerRequest('https://api.example.com/logs', origin)).toBe(false);
+    expect(isDevServerRequest('https://api.example.com/merchant/home', null)).toBe(false);
   });
 });

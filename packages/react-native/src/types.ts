@@ -48,13 +48,30 @@ export interface ObserveConfig {
   /** Record fetch/XHR requests (default true). */
   networkTrackingEnabled?: boolean;
   /**
-   * Keep the start of the body of error responses (status >= 400, up to 2 KB)
+   * Keep the start of the body of error responses (status >= 400, up to 4 KB)
    * so the dashboard shows what the API answered (default false). JSON keys
    * that look like credentials are redacted; anything else in the body is sent,
    * so only enable it for APIs whose error bodies hold no personal data you
    * cannot store.
    */
   networkErrorBodiesEnabled?: boolean;
+  /**
+   * Which responses keep the start of their body (up to 4 KB) so the dashboard
+   * shows what the API answered: `'off'`, `'errors'` (status >= 400) or
+   * `'all'` (every response that arrived, e.g. for APIs that answer 200 with an
+   * error in the body). Keys that look like credentials are redacted on
+   * device; anything else in the body is sent, so only use it for APIs whose
+   * responses hold no personal data you cannot store. Overrides
+   * `networkErrorBodiesEnabled` (default `'off'`).
+   */
+  networkResponseBodies?: 'off' | 'errors' | 'all';
+  /**
+   * Send the full URL of each request as called: real path and query string
+   * (user info and fragment dropped, credential-like query values such as
+   * `token` or `pin` redacted). Host and templated path are always sent
+   * (default false).
+   */
+  networkFullUrls?: boolean;
   /** Request URLs to ignore: substring or RegExp. */
   ignoreUrls?: (string | RegExp)[];
   /** A new session starts after this long in background (default 30 s). */
