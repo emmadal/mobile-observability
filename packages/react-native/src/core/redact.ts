@@ -162,17 +162,22 @@ export function redactUrl(url: string, maxLength: number): string {
   const withoutUser = withoutFragment.replace(URL_PREFIX, '$1');
   const queryStart = withoutUser.indexOf('?');
   if (queryStart === -1) return withoutUser.slice(0, maxLength);
-  // Pairs split on `&` and `;` (both are used as separators), delimiters kept.
+  // Pairs are split on `&` only, as servers read them. A `;` may still start
+  // a key inside a pair: from the first sensitive key on, the rest of the pair
+  // is redacted, so `token=abc;def` keeps neither `abc` nor `def`.
   const query = withoutUser
     .slice(queryStart + 1)
-    .split(/([&;])/)
+    .split('&')
     .map((pair) => {
-      const separator = pair.indexOf('=');
-      if (separator === -1) return pair;
-      const rawKey = pair.slice(0, separator);
-      return isSensitiveKey(decodeQueryKey(rawKey)) ? `${rawKey}=${REDACTED}` : pair;
+      const keys = /(^|;)([^=;]*)=/g;
+      for (let match = keys.exec(pair); match; match = keys.exec(pair)) {
+        if (isSensitiveKey(decodeQueryKey(match[2] ?? ''))) {
+          return `${pair.slice(0, match.index + match[0].length)}${REDACTED}`;
+        }
+      }
+      return pair;
     })
-    .join('');
+    .join('&');
   return `${withoutUser.slice(0, queryStart)}?${query}`.slice(0, maxLength);
 }
 

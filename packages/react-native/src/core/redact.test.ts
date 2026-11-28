@@ -159,9 +159,15 @@ describe('redaction of values that are objects or arrays, in text too long to pa
 });
 
 describe('redactUrl separators', () => {
-  it('redacts pairs separated by semicolons too', () => {
-    expect(redactUrl('https://api.example.com/a?lang=en;token=abc&pin=1;x=2', 2048)).toBe(
-      'https://api.example.com/a?lang=en;token=[redacted]&pin=[redacted];x=2',
+  it('reads pairs as servers do: split on & only, a value may contain ;', () => {
+    expect(redactUrl('https://api.example.com/a?token=abc;def&lang=en', 2048)).toBe(
+      'https://api.example.com/a?token=[redacted]&lang=en',
+    );
+  });
+
+  it('redacts from a sensitive key that follows ; to the end of its pair', () => {
+    expect(redactUrl('https://api.example.com/a?lang=en;token=abc;x=1&pin=1;x=2&q=ok', 2048)).toBe(
+      'https://api.example.com/a?lang=en;token=[redacted]&pin=[redacted]&q=ok',
     );
   });
 });
